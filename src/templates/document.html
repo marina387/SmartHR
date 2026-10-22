@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ document.title }}{% endblock %}
+{% block content %}
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if updated %}<div class="alert alert-success" role="status">Документ обновлён. Изменения доступны в поиске.</div>{% endif %}
+<div class="document-layout">
+    <article class="card border-0 shadow-sm document-reader">
+        <div class="document-reader-header">
+            <a class="document-back" href="{{ url_for('main.documents_page') }}"><i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>Все документы</a>
+            <h1 class="h3 fw-bold mt-4 mb-2">{{ document.title }}</h1>
+            <div class="small text-muted document-filename"><i class="fa-regular fa-file-lines me-2" aria-hidden="true"></i>{{ document.source }}</div>
+        </div>
+        <div class="document-reader-text">{{ document.text }}</div>
+    </article>
+    <aside class="document-sidebar" id="documentManagement" aria-label="Управление документом">
+        <div class="card border-0 shadow-sm document-settings">
+            <div class="document-settings-heading">
+                <span class="document-settings-icon"><i class="fa-solid fa-sliders" aria-hidden="true"></i></span>
+                <div><h2 class="h6 fw-bold mb-1">Управление документом</h2><p class="small text-muted mb-0">Название и актуальная версия</p></div>
+            </div>
+            <form class="document-settings-section" method="post" action="{{ url_for('main.rename_document', document_id=document.id) }}">
+                <label class="form-label small fw-semibold" for="documentTitle">Название</label>
+                <input class="form-control mb-3" id="documentTitle" name="title" value="{{ document.title }}" maxlength="200" required>
+                <button class="btn btn-outline-primary w-100" type="submit">Сохранить название</button>
+            </form>
+            <form class="document-settings-section" method="post" enctype="multipart/form-data" action="{{ url_for('main.replace_document', document_id=document.id) }}">
+                <label class="form-label small fw-semibold" for="replacementFile">Заменить файл</label>
+                <p class="small text-muted mb-3">Загрузите новую версию — название и ссылка сохранятся.</p>
+                <input class="form-control form-control-sm" id="replacementFile" name="file" type="file" accept=".pdf,.docx,.txt,.md" required>
+                <div class="document-file-hint">PDF, DOCX, TXT, MD · до 16 МБ</div>
+                <button class="btn btn-primary w-100 mt-3" type="submit"><i class="fa-solid fa-arrow-up-from-bracket me-2" aria-hidden="true"></i>Обновить файл</button>
+            </form>
+            <div class="document-settings-section">
+                <a class="btn btn-light border w-100" href="{{ url_for('main.download_document', document_id=document.id) }}"><i class="fa-solid fa-download me-2" aria-hidden="true"></i>Скачать оригинал</a>
+            </div>
+        </div>
+        <form class="document-delete-panel" method="post" action="{{ url_for('main.delete_document', document_id=document.id) }}">
+            <h2 class="small fw-semibold mb-2">Удаление документа</h2>
+            <p class="small text-muted mb-3">Документ исчезнет из библиотеки и поиска.</p>
+            <div class="form-check mb-3">
+                <input class="form-check-input" id="confirmDocumentDelete" type="checkbox" name="confirm" value="yes" required>
+                <label class="form-check-label small" for="confirmDocumentDelete">Подтверждаю удаление</label>
+            </div>
+            <button class="btn btn-sm btn-outline-danger w-100" type="submit">Удалить документ</button>
+        </form>
+    </aside>
+</div>
+{% endblock %}

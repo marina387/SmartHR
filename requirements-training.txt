@@ -1,0 +1,7 @@
+-r requirements-chat.txt
+datasets
+peft
+trl
+PyYAML
+scikit-learn==1.6.0
+# Для method: qlora дополнительно установите совместимый с вашей CUDA пакет bitsandbytes.

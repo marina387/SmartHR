@@ -1,0 +1,70 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; padding: 24px; }
+h1 { text-align: center; margin-bottom: 24px; font-size: 1.8rem; }
+h2 { margin-bottom: 12px; font-size: 1.2rem; }
+h3 { margin-bottom: 8px; font-size: 1rem; }
+.container { max-width: 1100px; margin: 0 auto; }
+.tabs { display: flex; gap: 4px; margin-bottom: 0; }
+.tab-btn { padding: 12px 24px; border: none; background: #d1d5db; border-radius: 12px 12px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+.tab-btn.active { background: #fff; color: #2563eb; }
+.tab-btn:hover:not(.active) { background: #e5e7eb; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 28px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+textarea, .text-input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
+textarea { min-height: 140px; }
+textarea:focus, .text-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s, opacity 0.2s; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+.btn-outline { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.btn-outline:hover:not(:disabled) { background: #f3f4f6; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-success:hover:not(:disabled) { background: #15803d; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.slider-row label { width: 240px; font-size: 14px; font-weight: 500; }
+.slider-row input[type="range"] { flex: 1; accent-color: #2563eb; }
+.slider-row .val { width: 40px; text-align: right; font-weight: 700; color: #2563eb; }
+.req-list { margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; max-height: 260px; overflow-y: auto; }
+.req-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px; border-bottom: 1px solid #f3f4f6; }
+.req-item:last-child { border-bottom: none; }
+.req-item input[type="checkbox"] { margin-top: 3px; accent-color: #dc2626; }
+.req-item label { flex: 1; font-size: 14px; cursor: pointer; }
+.req-tag { font-size: 11px; color: #dc2626; font-weight: 600; white-space: nowrap; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+th { background: #f8fafc; font-weight: 600; }
+tr:hover td { background: #f9fafb; }
+.status-icon { font-size: 1.2rem; }
+.total-status { margin-top: 16px; padding: 16px; border-radius: 8px; text-align: center; font-weight: 700; font-size: 1.05rem; }
+.total-status.green { background: #dcfce7; color: #166534; }
+.total-status.yellow { background: #fef9c3; color: #854d0e; }
+.total-status.red { background: #fecaca; color: #991b1b; }
+.critical-block { background: #fee2e2; border: 2px solid #dc2626; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+.critical-block h3 { color: #991b1b; }
+.critical-block ul { margin: 10px 0 10px 20px; color: #991b1b; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: #f8fafc; border-radius: 10px; padding: 16px; text-align: center; }
+.stat-card .num { font-size: 1.8rem; font-weight: 700; }
+.stat-card.green .num { color: #16a34a; }
+.stat-card.yellow .num { color: #ca8a04; }
+.stat-card.red .num { color: #dc2626; }
+.stat-card .label { font-size: 13px; color: #6b7280; margin-top: 4px; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.filter-btn { padding: 6px 14px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; cursor: pointer; font-size: 13px; }
+.filter-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-yellow { background: #fef9c3; color: #854d0e; }
+.badge-red { background: #fecaca; color: #991b1b; }
+.empty-state { text-align: center; padding: 40px; color: #9ca3af; }
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; color: #fff; font-weight: 600; z-index: 9999; }
+.toast.green { background: #16a34a; }
+.toast.red { background: #dc2626; }
+.toast.yellow { background: #ca8a04; }
+hr { margin: 20px 0; border: none; border-top: 1px solid #e5e7eb; }
+.hint { font-size: 13px; color: #6b7280; margin-top: 6px; }

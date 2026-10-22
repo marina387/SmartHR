@@ -1,0 +1,9 @@
+# Runtime-зависимости обученной локальной чат-модели.
+# Устанавливаются только на машине, где будет запускаться LLM.
+torch
+transformers
+accelerate
+safetensors
+peft
+sentence-transformers
+faiss-cpu

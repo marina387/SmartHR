@@ -1,0 +1,375 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Карточка кандидата{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 p-4">
+            <div class="row align-items-center">
+                <div class="col-md-2 text-center">
+                    <div class="avatar-circle mx-auto mb-3">
+                        <i class="fa-solid fa-user fa-2x"></i>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                        <h2 class="fw-bold mb-0">{{ candidate.name }}</h2>
+                        <span class="status-badge badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.icon }} {{ candidate.status_meta.label }}</span>
+                    </div>
+                    <p class="text-muted mb-2">{{ candidate.position }} · Оценка {{ candidate.score }}/100</p>
+                    <div class="d-flex flex-wrap gap-3 small text-muted">
+                        <span><i class="fa-solid fa-briefcase me-2"></i>{{ candidate.vacancy_id or 'VAC_001' }} · {{ candidate.vacancy_title or 'Не указана' }}</span>
+                        <span><i class="fa-solid fa-envelope me-2"></i>{{ candidate.email }}</span>
+                        <span><i class="fa-solid fa-phone me-2"></i>{{ candidate.phone }}</span>
+                        <span><i class="fa-solid fa-calendar me-2"></i>{{ candidate.timestamp or 'Новая запись' }}</span>
+                    </div>
+                </div>
+                <div class="col-md-3 text-md-end">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary"><i class="fa-solid fa-pen me-2"></i>Редактировать</button>
+                        {% if candidate.lifecycle_status == 'archived' %}
+                        <button id="restoreCandidateBtn" class="btn btn-success"><i class="fa-solid fa-box-open me-2"></i>Восстановить</button>
+                        {% else %}
+                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#interviewModal"><i class="fa-solid fa-calendar-plus me-2"></i>Запланировать интервью</button>
+                        <button id="retentionCheckBtn" class="btn btn-outline-danger"><i class="fa-solid fa-box-archive me-2"></i>Проверить и архивировать</button>
+                        {% endif %}
+                        <button class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#feedbackModal"><i class="fa-solid fa-sliders me-2"></i>Исправить оценку</button>
+                        <label class="form-label small text-muted mb-0 text-start" for="candidateStageSelect">Этап кандидата</label>
+                        <select id="candidateStageSelect" class="form-select">
+                            {% for value, label in [('new', 'Новый'), ('scored', 'Оценён'), ('recommended', 'Рекомендован'), ('archived', 'В архиве'), ('transferred', 'Перенесён'), ('rejected_all', 'Отклонён по всем вакансиям')] %}
+                            {% if current_stage == value %}<option value="{{ value }}" selected>{{ label }}</option>{% endif %}
+                            {% endfor %}
+                            <option value="in_review" {% if current_stage == 'in_review' %}selected{% endif %}>В работе HR</option>
+                            <option value="interview" {% if current_stage == 'interview' %}selected{% endif %}>Интервью</option>
+                            <option value="interview_completed" {% if current_stage == 'interview_completed' %}selected{% endif %}>Интервью пройдено</option>
+                            <option value="offer" {% if current_stage == 'offer' %}selected{% endif %}>Оффер</option>
+                            <option value="hired" {% if current_stage == 'hired' %}selected{% endif %}>Нанят</option>
+                            <option value="rejected" {% if current_stage == 'rejected' %}selected{% endif %}>Отклонён</option>
+                            <option value="withdrawn" {% if current_stage == 'withdrawn' %}selected{% endif %}>Отозвал кандидатуру</option>
+                        </select>
+                        <div id="candidateStageState" class="small text-muted text-start">Изменения сохраняются автоматически</div>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('main.chat_page', candidate_id=candidate.id) }}"><i class="fa-solid fa-comment-dots me-2"></i>Чат</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Оценка по критериям</h4>
+                {% for item in criteria_items %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="fw-medium">{{ item.label }}</span>
+                        <span class="text-muted">{{ item.score }}/10</span>
+                    </div>
+                    <div class="progress" role="progressbar" aria-valuenow="{{ item.score * 10 }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar bg-primary" style="width: {{ item.score * 10 }}%"></div>
+                    </div>
+                    <div class="small text-muted mt-1">{{ item.comment }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Блок «Решение HR» — ДОБАВЛЕН -->
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Решение HR по вакансии</h4>
+                <p class="mb-3">
+                    Вакансия: <strong>{{ candidate.vacancy_title or "Не выбрана" }}</strong>
+                    {% if candidate.vacancy_id %}<span class="text-muted small">({{ candidate.vacancy_id }})</span>{% endif %}
+                </p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-success" onclick="submitDecision('{{ candidate.id }}', '{{ candidate.vacancy_id or '' }}', 1)">
+                        <i class="fa-solid fa-thumbs-up me-2"></i>Подходит
+                    </button>
+                    <button class="btn btn-danger" onclick="submitDecision('{{ candidate.id }}', '{{ candidate.vacancy_id or '' }}', 0)">
+                        <i class="fa-solid fa-thumbs-down me-2"></i>Не подходит
+                    </button>
+                </div>
+                <div id="decision-status" class="mt-2 small text-muted"></div>
+            </div>
+        </div>
+
+        {% if candidate.model_probability is not none and candidate.model_probability is defined %}
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Результат модели</h4>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="small text-muted">Вероятность соответствия</div>
+                        <div class="fs-4 fw-bold">{{ (candidate.model_probability * 100) | round(1) }}%</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Версия модели</div>
+                        <div class="fw-semibold">{{ candidate.model_version }}</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="small text-muted">Использованные веса</div>
+                        <div class="small">
+                            {% for key, value in candidate.used_weights.items() %}
+                            <span class="me-2">{{ key }}: {{ value }}%</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% if candidate.missing_fields %}
+                <div class="alert alert-warning mt-3 mb-0">
+                    Не найдены поля резюме: {{ candidate.missing_fields | join(', ') }}. Для них применены нейтральные значения.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Навыки</h4>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for skill in candidate.skills %}
+                    <span class="badge rounded-pill bg-light text-dark">{{ skill }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Опыт работы</h4>
+                <ul class="mb-0 ps-3 text-muted">
+                    {% for item in candidate.experience %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Запланированные интервью</h4>
+                <div class="list-group list-group-flush">
+                    {% for interview in interviews %}
+                    <div class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">{{ interview.date }} {{ interview.time }} ({{ interview.duration }} мин)</div>
+                            <div class="small text-muted">Формат: {{ 'Онлайн' if interview.format == 'online' else 'Офис' }} · Статус: {{ interview.status }}</div>
+                            {% if interview.notes %}
+                            <div class="small text-muted">{{ interview.notes }}</div>
+                            {% endif %}
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger delete-interview-btn" data-interview-id="{{ interview.id }}">Удалить</button>
+                    </div>
+                    {% else %}
+                    <div class="small text-muted">Интервью пока не запланированы.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                        <h4 class="fw-semibold mb-1">Подходящие альтернативные вакансии</h4>
+                        <div class="small text-muted">Система сравнивает кандидата с другими активными вакансиями.</div>
+                    </div>
+                    <button id="refreshAlternativesBtn" class="btn btn-outline-primary btn-sm" type="button">Найти вакансии</button>
+                </div>
+                <div id="alternativeVacanciesState" class="small text-muted">Поиск рекомендаций...</div>
+                <div id="alternativeVacanciesList" class="row g-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">Комментарии HR</h4>
+                <div class="row g-3">
+                    {% for key, comment in candidate.comments.items() %}
+                    <div class="col-md-6">
+                        <div class="comment-box p-3 rounded-4 border">
+                            <div class="fw-semibold mb-2">{{ scoring_service.criteria_labels.get(key, key) }}</div>
+                            <p class="mb-0 text-muted">{{ comment }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h4 class="fw-semibold mb-3">История корректировок оценок</h4>
+                <div class="list-group list-group-flush">
+                    {% for feedback in feedback_items %}
+                    <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between flex-wrap gap-2">
+                            <div class="fw-semibold">{{ feedback.created_at }} · {{ feedback.hr_id }}</div>
+                            <div class="small text-muted">ID: {{ feedback.feedback_id or feedback.id }}</div>
+                        </div>
+                        <div class="small text-muted mt-2">Комментарий: {{ feedback.comment or 'Без комментария' }}</div>
+                    </div>
+                    {% else %}
+                    <div class="small text-muted">Корректировок пока нет.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="interviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Планирование интервью</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Дата</label>
+                        <input id="interviewDate" type="date" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Время</label>
+                        <input id="interviewTime" type="time" class="form-control">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Длительность (мин)</label>
+                        <input id="interviewDuration" type="number" min="15" step="15" class="form-control" value="60">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Формат</label>
+                        <select id="interviewFormat" class="form-select">
+                            <option value="online">Онлайн</option>
+                            <option value="office">Офис</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Заметки</label>
+                        <textarea id="interviewNotes" class="form-control" rows="4" placeholder="Например: обсудить управленческий опыт и мотивацию"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="saveInterviewBtn" type="button" class="btn btn-success">Сохранить интервью</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="feedbackModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Исправить оценку кандидата</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    {% for criterion in criteria %}
+                    <div class="col-md-6">
+                        <label class="form-label">{{ scoring_service.criteria_labels.get(criterion, criterion) }}</label>
+                        <input
+                            id="feedback_{{ criterion }}"
+                            type="number"
+                            class="form-control"
+                            min="1"
+                            max="10"
+                            step="0.1"
+                            value="{{ candidate.scores.get(criterion, 5) }}"
+                        >
+                    </div>
+                    {% endfor %}
+                    <div class="col-md-6">
+                        <label class="form-label">HR ID</label>
+                        <input id="feedbackHrId" class="form-control" value="HR_ANNA">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Комментарий</label>
+                        <textarea id="feedbackComment" class="form-control" rows="4" placeholder="Почему была изменена оценка"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="saveFeedbackBtn" type="button" class="btn btn-warning">Сохранить исправление</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="alternativeCompareModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Сравнение вакансий</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div id="alternativeCompareBody" class="modal-body"></div>
+        </div>
+    </div>
+</div>
+
+<script id="candidateDetailData" type="application/json">
+{{ {
+    "candidate_id": candidate.id,
+    "candidate_name": candidate.name,
+    "vacancy_id": candidate.vacancy_id or "VAC_001",
+    "lifecycle_status": candidate.lifecycle_status or "active",
+    "current_stage": current_stage,
+    "original_scores": candidate.scores
+} | tojson }}
+</script>
+
+<script>
+// submitDecision — запись решения HR в feedback.payload
+async function submitDecision(candidateId, vacancyId, decision) {
+  const status = document.getElementById('decision-status');
+  if (!status) return;
+  if (!vacancyId || vacancyId === 'None' || vacancyId === '') {
+    status.textContent = 'Ошибка: у кандидата нет vacancy_id';
+    status.className = 'mt-2 small text-danger';
+    return;
+  }
+  status.textContent = 'Сохранение...';
+  status.className = 'mt-2 small text-muted';
+  try {
+    const resp = await fetch('/api/feedback/decision', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        vacancy_id: vacancyId,
+        decision: decision,
+        hr_id: 'HR_UI',
+        comment: ''
+      })
+    });
+    if (!resp.ok) {
+      let msg = resp.status;
+      try { const err = await resp.json(); msg = err.error || msg; } catch (_) {}
+      status.textContent = 'Ошибка: ' + msg;
+      status.className = 'mt-2 small text-danger';
+      return;
+    }
+    status.textContent = decision === 1 ? 'Записано: подходит' : 'Записано: не подходит';
+    status.className = 'mt-2 small text-success';
+  } catch (e) {
+    status.textContent = 'Ошибка сети: ' + e;
+    status.className = 'mt-2 small text-danger';
+  }
+}
+</script>
+{% endblock %}

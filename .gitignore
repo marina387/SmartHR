@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*.json
+data/json_backup/
+data/chat/raw/
+data/chat/anonymized/
+data/chat/collected/
+data/chat/synthetic/
+data/chat/processed/
+data/chat/*.jsonl
+models/chat_model*/
+evaluation/chat/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.backup
+
+.venv-run/
+data/backups/
+data/documents/
+
+# Publication: private runtime data and local model caches
+data/**
+!data/.gitkeep
+Users/
+models/**
+!models/matching_model.pkl
+!models/model_metadata.json
+*.safetensors
+*.bin

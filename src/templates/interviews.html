@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Календарь интервью{% endblock %}
+{% block content %}
+<div id="interviewNotice" class="alert d-none" role="status"></div>
+<div class="row g-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div>
+                <h2 class="fw-bold mb-1">Календарь интервью</h2>
+                <p class="text-muted mb-0">Управляйте всеми запланированными интервью в одном разделе.</p>
+            </div>
+            <span id="interviewActionStatus" class="badge bg-secondary">Готово</span>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Всего интервью</div>
+                        <div class="h4 fw-bold mb-0">{{ stats.total }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Запланировано</div>
+                        <div class="h4 fw-bold mb-0">{{ stats.scheduled }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Завершено</div>
+                        <div class="h4 fw-bold mb-0">{{ stats.completed }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <div class="small text-muted">Отменено</div>
+                        <div class="h4 fw-bold mb-0">{{ stats.cancelled }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <form method="get" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Статус</label>
+                        <select name="status" class="form-select">
+                            <option value="all" {% if selected_status == 'all' %}selected{% endif %}>Все</option>
+                            <option value="scheduled" {% if selected_status == 'scheduled' %}selected{% endif %}>Запланировано</option>
+                            <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Завершено</option>
+                            <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Отменено</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Дата от</label>
+                        <input type="date" name="date_from" class="form-control" value="{{ selected_date_from }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Дата до</label>
+                        <input type="date" name="date_to" class="form-control" value="{{ selected_date_to }}">
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button class="btn btn-primary w-100" type="submit"><i class="fa-solid fa-filter me-2"></i>Применить</button>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('main.interviews_page') }}">Сброс</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Кандидат</th>
+                                <th>Вакансия</th>
+                                <th>Дата и время</th>
+                                <th>Формат</th>
+                                <th>Статус</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for interview in interviews %}
+                            <tr>
+                                <td>{{ interview.id }}</td>
+                                <td>
+                                    <div class="fw-semibold">{{ interview.candidate_name }}</div>
+                                    <div class="small text-muted">{{ interview.candidate_id }}</div>
+                                </td>
+                                <td>{{ interview.vacancy_id }}</td>
+                                <td>
+                                    <div>{{ interview.date }} {{ interview.time }}</div>
+                                    <div class="small text-muted">{{ interview.duration }} мин</div>
+                                </td>
+                                <td>{{ 'Онлайн' if interview.format == 'online' else 'Офис' }}</td>
+                                <td>
+                                    {% if interview.status == 'scheduled' %}
+                                    <span class="badge bg-warning text-dark">Запланировано</span>
+                                    {% elif interview.status == 'completed' %}
+                                    <span class="badge bg-success">Завершено</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Отменено</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary interview-edit-btn" data-interview='{{ interview|tojson|forceescape }}'>Редактировать</button>
+                                        <button class="btn btn-sm btn-outline-success interview-status-btn" data-id="{{ interview.id }}" data-status="completed">Завершить</button>
+                                        <button class="btn btn-sm btn-outline-warning interview-status-btn" data-id="{{ interview.id }}" data-status="cancelled">Отменить</button>
+                                        <button class="btn btn-sm btn-outline-danger interview-delete-btn" data-id="{{ interview.id }}">Удалить</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">Интервью не найдены по выбранным фильтрам.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="editInterviewModal" tabindex="-1" aria-labelledby="editInterviewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" id="editInterviewForm">
+            <div class="modal-header">
+                <h3 class="modal-title fs-5" id="editInterviewTitle">Редактирование интервью</h3>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body">
+                <p class="fw-semibold mb-1" id="editInterviewCandidate"></p>
+                <p class="small text-muted" id="editInterviewVacancy"></p>
+                <div id="editInterviewError" class="alert alert-danger d-none" role="alert"></div>
+                <div class="row g-3">
+                    <div class="col-sm-6"><label for="editInterviewDate" class="form-label">Дата</label><input id="editInterviewDate" type="date" class="form-control" required></div>
+                    <div class="col-sm-6"><label for="editInterviewTime" class="form-label">Время</label><input id="editInterviewTime" type="time" class="form-control" required></div>
+                    <div class="col-sm-6"><label for="editInterviewDuration" class="form-label">Длительность, минут</label><input id="editInterviewDuration" type="number" min="1" max="1440" step="1" class="form-control" required></div>
+                    <div class="col-sm-6"><label for="editInterviewFormat" class="form-label">Формат</label><select id="editInterviewFormat" class="form-select"><option value="online">Онлайн</option><option value="office">Офис</option></select></div>
+                    <div class="col-12"><label for="editInterviewStatus" class="form-label">Статус</label><select id="editInterviewStatus" class="form-select"><option value="scheduled">Запланировано</option><option value="completed">Завершено</option><option value="cancelled">Отменено</option></select></div>
+                    <div class="col-12"><label for="editInterviewNotes" class="form-label">Заметки</label><textarea id="editInterviewNotes" rows="3" class="form-control"></textarea></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="saveInterviewChanges" type="submit" class="btn btn-primary">Сохранить изменения</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

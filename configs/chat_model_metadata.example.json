@@ -1,0 +1,9 @@
+{
+  "model_type": "causal_lm",
+  "base_model": "replace-with-base-model",
+  "format_version": "1.0",
+  "language": ["ru"],
+  "context_length": 4096,
+  "supports_tools": false,
+  "training_dataset_version": "1.0"
+}

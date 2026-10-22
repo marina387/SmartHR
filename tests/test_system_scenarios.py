@@ -1,0 +1,363 @@
+"""Пользовательские сценарии с настоящими SQL-репозиториями в отдельной SQLite."""
+from io import BytesIO
+from pathlib import Path
+import pytest
+from flask import Flask
+from src.extensions import db
+from src.routes import main as routes
+from src.chat.models import MockChatModel
+from src.core.rag_pipeline import RagPipeline
+from src.storage.sql_storage import SqlVacancyStorage, SqlCandidateStorage, SqlScoreResultStorage
+
+ROOT = Path(__file__).resolve().parents[1]
+
+@pytest.fixture
+def system(tmp_path, monkeypatch):
+    test_app = Flask('system_scenarios', template_folder=str(ROOT / 'src/templates'), static_folder=str(ROOT / 'src/static'))
+    test_app.config.update(TESTING=True, SECRET_KEY='isolated-test', SQLALCHEMY_DATABASE_URI=f"sqlite:///{(tmp_path / 'system.db').as_posix()}", SQLALCHEMY_TRACK_MODIFICATIONS=False, MAX_CONTENT_LENGTH=16*1024*1024)
+    db.init_app(test_app)
+    test_app.register_blueprint(routes.main_bp)
+    monkeypatch.setattr(routes, 'chat_model', MockChatModel())
+    monkeypatch.setattr(routes, 'UPLOAD_DOCS_DIR', tmp_path / 'uploads')
+    monkeypatch.setattr(routes, 'DOCS_DIR', ROOT / 'docs/sample_docs')
+    rag = RagPipeline(backend='tfidf')
+    rag.build_index(routes._library_documents())
+    monkeypatch.setattr(routes, 'rag_pipeline', rag)
+    monkeypatch.setattr(routes, 'DOCUMENTS', routes._load_documents())
+    with test_app.app_context():
+        db.create_all()
+        SqlVacancyStorage().save({'id':'VAC_SYS', 'title':'Разработчик', 'status':'active', 'weights':{'hard':50,'soft':30,'management':10,'education':5,'salary':5}})
+        for key, name in [('CV_ANNA','Агафонова Анна Сергеевна'),('CV_VERA','Архипова Вера Ивановна')]:
+            SqlCandidateStorage().save_candidate({'id':key, 'name':name, 'position':'Разработчик', 'vacancy_id':'VAC_SYS', 'resume_text':'Навыки: Python, SQL. Опыт работы: 5 лет. Высшее образование.', 'lifecycle_status':'active'})
+            routes.candidate_stage_service.transition(key, 'VAC_SYS', 'in_review')
+            SqlScoreResultStorage().save({'candidate_id':key, 'vacancy_id':'VAC_SYS', 'total':71, 'scores':{'hard':8.7}, 'used_weights':{'hard':100}, 'evidence':{'hard':'Подтверждены Python и SQL'}, 'created_at':'2026-10-21T10:00:00'})
+        with test_app.test_client() as client:
+            yield client
+        db.session.remove()
+        db.engine.dispose()
+
+
+def ask(client, message, conversation_id=None):
+    response = client.post('/api/chat', json={'message':message, 'conversation_id':conversation_id})
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()
+
+
+def schedule(client, candidate='CV_ANNA', time='16:00'):
+    response = client.post('/api/interviews', json={'candidate_id':candidate,'candidate_name':'Тестовый кандидат','vacancy_id':'VAC_SYS','date':'2099-10-22','time':time,'duration':60,'format':'online'})
+    assert response.status_code == 201, response.get_json()
+    return response.get_json()
+
+
+@pytest.mark.parametrize('query', ['дата интервью Агафоновой', 'покажи интервью Агафоновой', 'когда собеседование Агафоновой', 'расписание интервью Агафоновой'])
+def test_interview_phrasings(system, query):
+    schedule(system)
+    result = ask(system, query)
+    assert '2099-10-22 16:00' in result['answer']
+    assert result['sources'] == []
+
+
+@pytest.mark.parametrize('query', ['список кандидатов на интервью', 'покажи кандидатов с назначенным интервью', 'какие кандидаты приглашены на собеседование'])
+def test_interview_candidate_list(system, query):
+    schedule(system)
+    result = ask(system, query)
+    assert 'Агафонова' in result['answer']
+    assert 'Архипова' not in result['answer']
+    assert result['sources'] == []
+
+
+def test_conversation_switch_and_compound_read(system):
+    schedule(system)
+    result = ask(system, 'найди Агафонову'); cid = result['conversation_id']
+    result = ask(system, 'дата её интервью и её оценка', cid)
+    assert '2099-10-22 16:00' in result['answer'] and '71/100' in result['answer']
+    result = ask(system, 'найди Архипову', cid)
+    assert result['context']['candidate']['id'] == 'CV_VERA'
+    result = ask(system, 'когда у неё интервью?', cid)
+    assert 'нет назначенных интервью' in result['answer']
+    restored = system.get('/api/chat/conversations/' + cid).get_json()
+    assert restored['context']['candidate']['id'] == 'CV_VERA'
+    assert len(restored['messages']) == 8
+
+
+def test_documents_followup_chain(system):
+    cid = ask(system, 'какие документы есть в базе?')['conversation_id']
+    assert ask(system, 'а трудовой кодекс?', cid)['answer'] == 'Нет, документа в базе нет.'
+    assert ask(system, 'а корпоративный кодекс?', cid)['answer'] == 'Да, документ есть в базе.'
+    result = ask(system, 'а покажи его', cid)
+    assert 'Корпоративный кодекс' in result['answer']
+    assert result['sources'][0]['id'] == 'corporate_code'
+
+
+def test_upload_search_and_reload_library(system):
+    text='Положение о командировках. Билеты согласовываются за 12 дней до поездки.'
+    response = system.post('/documents/upload',data={'file':(BytesIO(text.encode()),'Командировки.txt')})
+    assert 'uploaded=1' in response.location
+    result = ask(system,'Найди в документах за сколько дней согласовываются билеты на командировку')
+    assert '12 дней' in result['answer']
+    source=result['sources'][0]['id']
+    assert text in system.get('/documents/'+source).get_data(as_text=True)
+    assert system.get('/documents/'+source+'/download').data.decode()==text
+    rebuilt = RagPipeline(backend='tfidf');rebuilt.build_index(routes._library_documents())
+    assert any(d['title']=='Командировки' for d in rebuilt.list_documents())
+
+
+def test_calendar_and_funnel_lifecycle(system):
+    item=schedule(system)
+    assert system.get('/api/analytics/funnel').get_json()['current_count']==2
+    assert 'Приглашены' in ask(system,'какой этап Агафоновой')['answer']
+    assert system.put('/api/interviews/'+item['id'], json={'status':'cancelled'}).status_code==200
+    assert 'В работе HR' in ask(system,'какой этап Агафоновой')['answer']
+    assert system.put('/api/interviews/'+item['id'], json={'status':'scheduled','time':'17:00'}).status_code==200
+    assert '17:00' in ask(system,'дата интервью Агафоновой')['answer']
+    assert system.put('/api/interviews/'+item['id'], json={'status':'completed'}).status_code==200
+    assert 'Прошли интервью' in ask(system,'какой этап Агафоновой')['answer']
+    assert system.post('/api/candidates/CV_ANNA/stage',json={'vacancy_id':'VAC_SYS','stage':'hired'}).status_code==200
+    assert system.get('/api/analytics/funnel').get_json()['hired_count']==1
+
+
+def test_action_requires_confirmation_and_is_not_repeated(system):
+    result=ask(system,'Переведи Агафонову на этап интервью')
+    token=result['suggested_action']['confirmation_token']
+    assert routes.candidate_vacancy_storage.find('CV_ANNA','VAC_SYS')['status']=='in_review'
+    response=system.post('/api/chat/actions/confirm',json={'confirmation_token':token})
+    assert response.status_code==200, response.get_json()
+    assert routes.candidate_vacancy_storage.find('CV_ANNA','VAC_SYS')['status']=='interview'
+    assert system.post('/api/chat/actions/confirm',json={'confirmation_token':token}).status_code==409
+
+
+def test_unknown_and_ambiguous_names_never_reuse_selected(system):
+    cid=ask(system,'найди Агафонову')['conversation_id']
+    response=system.post('/api/chat',json={'message':'дата интервью Несуществующей','conversation_id':cid})
+    assert response.status_code==400
+    SqlCandidateStorage().save_candidate({'id':'CV_DUP','name':'Агафонова Вера','resume_text':'SQL','lifecycle_status':'active'})
+    response=system.post('/api/chat',json={'message':'найди Агафонову','conversation_id':cid})
+    assert response.status_code==400 and 'несколько' in response.get_json()['error']
+
+
+def test_manual_candidate_and_archive_restore_affect_analytics(system):
+    created=system.post('/api/candidates/manual',json={'name':'Тестов Артём','position':'Разработчик','vacancy_id':'VAC_SYS','resume_text':'Должность: Python-разработчик. Опыт работы: 5 лет. Навыки: Python, SQL. Образование: высшее.'})
+    assert created.status_code==201,created.get_json()
+    candidate_id=created.get_json()['id']
+    assert SqlScoreResultStorage().list_by_candidate(candidate_id)
+    assert system.get('/candidate/'+candidate_id).status_code==200
+    assert system.get('/api/analytics/funnel').get_json()['initial_count']==3
+    vacancy=SqlVacancyStorage().get_by_id('VAC_SYS')
+    SqlVacancyStorage().save({**vacancy,'status':'closed'})
+    archived=system.post('/api/candidates/'+candidate_id+'/retention-check')
+    assert archived.status_code==200 and archived.get_json()['archived'],archived.get_json()
+    assert system.get('/api/analytics/funnel').get_json()['outcomes']['archived']==1
+    assert all(c['id']!=candidate_id for c in routes._chat_service().tools.list_candidates_for_chat())
+    restored=system.post('/api/candidates/'+candidate_id+'/restore')
+    assert restored.status_code==200
+    assert restored.get_json()['lifecycle_status']=='active'
+    assert system.get('/api/analytics/funnel').get_json()['outcomes']['archived']==0
+
+
+def test_archive_protects_candidate_with_interview(system):
+    schedule(system)
+    vacancy=SqlVacancyStorage().get_by_id('VAC_SYS')
+    SqlVacancyStorage().save({**vacancy,'status':'closed'})
+    response=system.post('/api/candidates/CV_ANNA/retention-check')
+    assert response.status_code==200 and response.get_json()['archived'] is False
+    assert SqlCandidateStorage().get_candidate('CV_ANNA')['lifecycle_status']=='active'
+
+
+def test_full_name_disambiguates_same_surname(system):
+    SqlCandidateStorage().save_candidate({'id':'CV_DUP','name':'Агафонова Вера','resume_text':'SQL','lifecycle_status':'active'})
+    result=ask(system,'найди Агафонова Анна')
+    assert result['context']['candidate']['id']=='CV_ANNA'
+
+
+def test_candidate_transfer_preserves_audit_and_context(system):
+    SqlVacancyStorage().save({'id':'VAC_TARGET','title':'Аналитик','status':'active','weights':{'hard':100,'soft':0,'management':0,'education':0,'salary':0}})
+    # Проверка переноса уже одобренной рекомендации, без загрузки/изменения моделей.
+    recommendation={'total':85,'current_total':71,'model_probability':.9,'model_version':'existing','used_weights':{'hard':100}}
+    moved=routes.candidate_vacancy_service.apply('CV_VERA','VAC_SYS','VAC_TARGET','transfer','HR_TEST','Проверка переноса',recommendation)
+    assert moved['application']['vacancy_id']=='VAC_TARGET'
+    assert routes.candidate_vacancy_storage.find('CV_VERA','VAC_SYS')['status']=='transferred'
+    assert routes.transfer_storage.list_all()[0]['candidate_id']=='CV_VERA'
+    assert system.get('/api/analytics/funnel').get_json()['outcomes']['transferred']==1
+
+
+def test_history_feedback_restores_with_actual_sql(system):
+    result=ask(system,'покажи корпоративный кодекс')
+    assert result['sources']
+    assert system.post(f"/api/chat/messages/{result['message_id']}/feedback",json={'rating':'useful'}).status_code==200
+    restored=system.get('/api/chat/conversations/'+result['conversation_id']).get_json()
+    assert restored['messages'][-1]['feedback']['rating']=='useful'
+    assert restored['messages'][-1]['sources']==result['sources']
+
+
+def test_selected_candidate_generic_followups(system):
+    cid=ask(system,'найди Агафонову')['conversation_id']
+    for query in ['расскажи о текущем кандидате','покажи его опыт работы']:
+        assert 'Агафонова' in ask(system,query,cid)['answer']
+
+
+@pytest.mark.parametrize('via_chat',[False,True])
+def test_transfer_routes_update_candidate_score_and_conversation(system,monkeypatch,via_chat):
+    SqlVacancyStorage().save({'id':'VAC_TARGET','title':'Аналитик','status':'active','weights':{'hard':100,'soft':0,'management':0,'education':0,'salary':0}})
+    recommendation={'vacancy_id':'VAC_TARGET','vacancy_title':'Аналитик','total':85,'current_total':71,'model_probability':.9,'model_version':'existing','used_weights':{'hard':100},'scores':{'hard':8.5},'evidence':{'hard':'Подтверждено'}}
+    monkeypatch.setattr(routes.AlternativeVacancyService,'find_alternatives',lambda *args,**kwargs:{'alternatives':[recommendation]})
+    if via_chat:
+        result=ask(system,'перенеси Архипову на VAC_TARGET')
+        response=system.post('/api/chat/actions/confirm',json={'confirmation_token':result['suggested_action']['confirmation_token']})
+        assert response.status_code==200,response.get_json()
+        after=ask(system,'её оценка',result['conversation_id'])
+    else:
+        response=system.post('/api/candidates/CV_VERA/vacancies',json={'from_vacancy_id':'VAC_SYS','to_vacancy_id':'VAC_TARGET','mode':'transfer','hr_id':'HR_TEST'})
+        assert response.status_code==201,response.get_json()
+        after=ask(system,'оценка Архиповой')
+    assert SqlCandidateStorage().get_candidate('CV_VERA')['vacancy_id']=='VAC_TARGET'
+    assert '85/100' in after['answer']
+    assert after['context']['vacancy']['id']=='VAC_TARGET'
+
+
+
+def test_edit_interview_form_and_full_update(system):
+    item=schedule(system)
+    page=system.get('/interviews').get_data(as_text=True)
+    assert 'Редактировать' in page and 'editInterviewForm' in page
+    assert 'data-interview=' in page and item['id'] in page
+    response=system.put('/api/interviews/'+item['id'],json={'date':'2099-10-23','time':'12:30','duration':45,'format':'office','status':'scheduled','notes':'Обсудить Python'})
+    assert response.status_code==200,response.get_json()
+    updated=response.get_json()
+    assert updated['id']==item['id'] and updated['candidate_id']=='CV_ANNA'
+    assert updated['time']=='12:30' and updated['duration']==45 and updated['notes']=='Обсудить Python'
+    assert len(system.get('/api/interviews').get_json())==1
+    assert '2099-10-23 12:30' in ask(system,'дата интервью Агафоновой')['answer']
+
+
+def test_edit_interview_conflict_keeps_original_values(system):
+    first=schedule(system,time='16:00')
+    second=schedule(system,time='17:00')
+    response=system.put('/api/interviews/'+second['id'],json={'time':'16:30','duration':60})
+    assert response.status_code==400
+    saved=next(i for i in system.get('/api/interviews').get_json() if i['id']==second['id'])
+    assert saved['time']=='17:00'
+
+
+
+def test_document_rename_replace_delete_and_catalog_reload(system):
+    response=system.post('/documents/upload',data={'file':(BytesIO('Старый порядок. Контрольное слово ананасы.'.encode()),'Порядок.txt')})
+    assert 'uploaded=1' in response.location
+    doc=next(d for d in routes._library_documents() if d.title=='Порядок')
+    response=system.post(f'/documents/{doc.id}/rename',data={'title':'Порядок согласования'})
+    assert 'updated=1' in response.location
+    assert next(d for d in routes._library_documents() if d.id==doc.id).title=='Порядок согласования'
+    assert 'Порядок согласования' in ask(system,'какие документы есть?')['answer']
+    assert routes.rag_pipeline.ask('Порядок согласования').hits[0].chunk.doc_id==doc.id
+    response=system.post(f'/documents/{doc.id}/replace',data={'file':(BytesIO('Новый порядок. Контрольное слово мандарины.'.encode()),'Новая версия.txt')})
+    assert 'updated=1' in response.location
+    updated=next(d for d in routes._library_documents() if d.id==doc.id)
+    assert updated.title=='Порядок согласования' and 'мандарины' in updated.text
+    assert len([d for d in routes._library_documents() if 'порядок' in d.text.casefold()])==1
+    assert system.get(f'/documents/{doc.id}/download').data.decode()==updated.text
+    assert not any(hit.chunk.doc_id==doc.id and 'ананасы' in hit.chunk.text for hit in routes.rag_pipeline.ask('ананасы').hits)
+    before=len(routes._library_documents())
+    response=system.post(f'/documents/{doc.id}/delete')
+    assert 'error=' in response.location and len(routes._library_documents())==before
+    response=system.post(f'/documents/{doc.id}/delete',data={'confirm':'yes'})
+    assert 'updated=1' in response.location
+    assert all(d.id!=doc.id for d in routes._library_documents())
+    assert all(d['id']!=doc.id for d in routes.rag_pipeline.list_documents())
+    assert system.get(f'/documents/{doc.id}').status_code==404
+    # Прочитываем каталог с диска заново, как после перезапуска.
+    rebuilt=RagPipeline(backend='tfidf');rebuilt.build_index(routes._library_documents())
+    assert all(d['id']!=doc.id for d in rebuilt.list_documents())
+
+
+def test_document_bad_replacement_keeps_old_version(system):
+    original=next(d for d in routes._library_documents() if d.id=='interview_guide')
+    response=system.post('/documents/interview_guide/replace',data={'file':(BytesIO(b'broken'),'broken.pdf')})
+    assert 'error=' in response.location
+    assert next(d for d in routes._library_documents() if d.id==original.id).text==original.text
+    assert all(d.id!='broken' for d in routes._library_documents())
+    response=system.post('/documents/interview_guide/rename',data={'title':' '})
+    assert 'error=' in response.location
+    assert next(d for d in routes._library_documents() if d.id==original.id).title==original.title
+
+
+def test_builtin_document_management_preserves_original_file(system):
+    original=next(d for d in routes._library_documents() if d.id=='corporate_code')
+    original_bytes=Path(original.metadata['path']).read_bytes()
+    response=system.post('/documents/corporate_code/rename',data={'title':'Корпоративный кодекс'})
+    assert 'updated=1' in response.location
+    response=system.post('/documents/corporate_code/replace',data={'file':(BytesIO('Новая корпоративная политика.'.encode()),'Кодекс.txt')})
+    assert 'updated=1' in response.location
+    response=system.post('/documents/corporate_code/replace',data={'file':(BytesIO('Последняя корпоративная политика.'.encode()),'Кодекс 2.txt')})
+    assert 'updated=1' in response.location
+    assert sum(d.id=='corporate_code' for d in routes._library_documents())==1
+    assert not any('Новая корпоративная' in d.text for d in routes._library_documents())
+    assert Path(original.metadata['path']).read_bytes()==original_bytes
+    response=system.post('/documents/corporate_code/delete',data={'confirm':'yes'})
+    assert 'updated=1' in response.location
+    assert Path(original.metadata['path']).read_bytes()==original_bytes
+    assert not any(d.id=='corporate_code' for d in routes._library_documents())
+
+
+
+def test_document_index_failure_does_not_commit_changes(system,monkeypatch):
+    original=next(d for d in routes._library_documents() if d.id=='interview_guide')
+    original_index=routes.rag_pipeline
+    def fail(*args,**kwargs): raise RuntimeError('simulated indexing failure')
+    monkeypatch.setattr(routes.RagPipeline,'build_index',fail)
+    for endpoint,payload in [('/rename',{'title':'Новое название'}),('/replace',{'file':(BytesIO('Новая версия.'.encode()),'version.txt')}),('/delete',{'confirm':'yes'})]:
+        response=system.post('/documents/interview_guide'+endpoint,data=payload)
+        assert 'error=' in response.location
+        current=next(d for d in routes._library_documents() if d.id==original.id)
+        assert current.title==original.title and current.text==original.text
+        assert routes.rag_pipeline is original_index
+    assert not list(routes.UPLOAD_DOCS_DIR.glob('*.tmp'))
+    assert not list(routes.UPLOAD_DOCS_DIR.glob('*.txt'))
+
+
+
+def test_conversation_list_open_continue_and_new_context(system):
+    empty=system.get('/api/chat/conversations').get_json()
+    assert empty=={'conversations':[],'next_offset':None}
+    first=ask(system,'найди Агафонову')
+    second=ask(system,'найди Архипову')
+    listing=system.get('/api/chat/conversations').get_json()['conversations']
+    assert [item['id'] for item in listing]==[second['conversation_id'],first['conversation_id']]
+    assert listing[0]['title']=='найди Архипову'
+    assert listing[0]['candidate_name']=='Архипова Вера Ивановна'
+    assert listing[0]['vacancy_title']=='Разработчик'
+    assert listing[0]['message_count']==2
+    continued=ask(system,'объясни её оценку',first['conversation_id'])
+    assert 'Агафонова' in continued['answer']
+    assert continued['context']['candidate']['id']=='CV_ANNA'
+    listing=system.get('/api/chat/conversations').get_json()['conversations']
+    assert listing[0]['id']==first['conversation_id']
+    assert listing[0]['title']=='найди Агафонову' and listing[0]['message_count']==4
+    new=ask(system,'Привет')
+    assert new['conversation_id'] not in {first['conversation_id'],second['conversation_id']}
+    assert new['context']['candidate'] is None
+    old=system.get('/api/chat/conversations/'+second['conversation_id']).get_json()
+    assert old['context']['candidate']['id']=='CV_VERA'
+    assert len(old['messages'])==2
+
+
+def test_conversation_list_pagination_and_legacy_titles(system):
+    first=ask(system,'какие документы есть?')
+    second=ask(system,'Привет')
+    record=routes.chat_conversation_storage.get_by_id(first['conversation_id'])
+    record.pop('title',None)
+    routes.chat_conversation_storage.save(record)
+    listing=system.get('/api/chat/conversations?limit=1').get_json()
+    assert len(listing['conversations'])==1 and listing['next_offset']==1
+    page=system.get('/api/chat/conversations?limit=1&offset=1').get_json()
+    assert page['next_offset'] is None
+    assert page['conversations'][0]['title']=='какие документы есть?'
+    assert 'messages' not in page['conversations'][0]
+    assert page['conversations'][0]['preview']
+    for query in ['limit=0','limit=101','offset=-1','limit=bad']:
+        assert system.get('/api/chat/conversations?'+query).status_code==400
+    assert system.get('/api/chat/conversations/missing').status_code==404
+
+
+def test_chat_history_controls_render(system):
+    page=system.get('/chat').get_data(as_text=True)
+    for marker in ['conversationList','loadMoreConversations','chatSidebar','currentConversationTitle','Новый диалог','История диалогов']:
+        assert marker in page

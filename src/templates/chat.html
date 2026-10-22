@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Чат{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0 overflow-hidden" id="chatApp"
+     data-candidate-id="{{ candidate.id if candidate else '' }}"
+     data-vacancy-id="{{ candidate.vacancy_id if candidate else '' }}">
+    <div class="row g-0">
+        <div class="col-lg-8">
+            <div class="chat-pane p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h2 class="fw-bold mb-1">Чат-ассистент</h2>
+                        <p class="text-muted mb-0">Задавайте вопросы по кандидатам и документам.</p>
+                        <div id="currentConversationTitle" class="small text-muted mt-1 chat-current-title">Новый диалог</div>
+                        <div class="small text-muted d-lg-none mt-1" id="compactChatContext">{{ candidate.name if candidate else 'Кандидат не выбран' }}</div>
+                    </div>
+                    <div class="d-flex flex-column gap-2 align-items-end">
+                        <span class="badge bg-success-subtle text-success" id="chatStatus">Готов</span>
+                        <button class="btn btn-sm btn-outline-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#chatSidebar" aria-controls="chatSidebar">Диалоги</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="newConversation" type="button">Новый диалог</button>
+                    </div>
+                </div>
+
+                <div id="chatMessages" class="chat-messages rounded-4 p-3 mb-3">
+                    <div class="message assistant">
+                        <div class="fw-semibold mb-1">Ассистент</div>
+                        <div>Здравствуйте! Я могу помочь найти кандидатов, оценить резюме, подготовить краткий отчёт и искать по документам.</div>
+                    </div>
+                </div>
+
+                <div class="quick-commands mb-3 d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-outline-primary quick-command" data-command="Расскажи о текущем кандидате">Кандидат</button>
+                    <button class="btn btn-sm btn-outline-primary quick-command" data-command="Объясни последнюю оценку кандидата">Оценка</button>
+                    <button class="btn btn-sm btn-outline-primary quick-command" data-command="Покажи текущий этап кандидата">Этап</button>
+                    <button class="btn btn-sm btn-outline-primary quick-command" data-command="Найди информацию в HR-документах">Документы</button>
+                </div>
+
+                <form id="chatForm" class="d-flex gap-2">
+                    <textarea aria-label="Сообщение ассистенту" id="chatInput" class="form-control" rows="2" placeholder="Введите запрос..."></textarea>
+                    <button class="btn btn-primary" type="submit" aria-label="Отправить"><i class="fa-solid fa-paper-plane"></i></button>
+                </form>
+            </div>
+        </div>
+        <div class="col-lg-4 border-start bg-light">
+            <aside class="offcanvas-lg offcanvas-end chat-sidebar" id="chatSidebar" tabindex="-1" aria-labelledby="chatSidebarTitle">
+                <div class="offcanvas-header d-lg-none">
+                    <h3 class="offcanvas-title h5" id="chatSidebarTitle">Диалоги и контекст</h3>
+                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#chatSidebar" aria-label="Закрыть"></button>
+                </div>
+                <div class="offcanvas-body chat-sidebar-body">
+                    <div class="chat-saved-context">
+                        <div class="small text-uppercase text-muted mb-2">Текущий кандидат</div>
+                        <div class="fw-semibold" id="currentCandidateName">{{ candidate.name if candidate else 'Кандидат не выбран' }}</div>
+                        <div class="small text-muted" id="currentCandidatePosition">{{ candidate.position if candidate else '' }}</div>
+                        <div class="small text-muted" id="currentVacancyTitle"></div>
+                        <div class="small text-muted mt-3">Последний документ</div>
+                        <div class="small" id="currentDocumentTitle">Документ не выбран</div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between gap-2 mt-4 mb-3">
+                        <h3 class="h6 fw-bold mb-0">История диалогов</h3>
+                        <button type="button" class="btn btn-sm btn-link text-decoration-none" id="refreshConversations" aria-label="Обновить список диалогов"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
+                    </div>
+                    <div id="conversationListStatus" class="small text-muted mb-2" role="status">Загрузка диалогов…</div>
+                    <div id="conversationList" class="conversation-list" aria-label="Сохранённые диалоги"></div>
+                    <button type="button" id="loadMoreConversations" class="btn btn-sm btn-outline-secondary mt-3 d-none">Показать ещё</button>
+                </div>
+            </aside>
+        </div>
+    </div>
+</div>
+{% endblock %}

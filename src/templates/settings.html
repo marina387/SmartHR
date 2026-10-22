@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Управление вакансиями{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0">
+    <div class="card-body text-center py-5">
+        <h2 class="fw-bold mb-2">Раздел переехал</h2>
+        <p class="text-muted mb-4">Управление весами теперь выполняется внутри конкретной вакансии.</p>
+        <a class="btn btn-primary" href="{{ url_for('main.vacancies_page') }}">Перейти к вакансиям</a>
+    </div>
+</div>
+{% endblock %}

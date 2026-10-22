@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Аналитика{% endblock %}
+{% block content %}
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<div class="row g-4">
+    <div class="col-12"><div class="card shadow-sm border-0 p-4">
+        <div class="mb-4"><h2 class="fw-bold mb-1">Воронка найма</h2><p class="text-muted mb-0">Сколько кандидатов было, сколько осталось и где происходит потеря.</p></div>
+        <form class="row g-3 align-items-end mb-4" method="get">
+            <div class="col-md-3"><label class="form-label">Вакансия</label><select class="form-select" name="vacancy_id"><option value="">Все вакансии</option>{% for vacancy in vacancies %}<option value="{{ vacancy.id }}" {% if selected_vacancy_id == vacancy.id %}selected{% endif %}>{{ vacancy.title }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label">С даты</label><input class="form-control" type="date" name="date_from" value="{{ selected_date_from }}"></div>
+            <div class="col-md-2"><label class="form-label">По дату</label><input class="form-control" type="date" name="date_to" value="{{ selected_date_to }}"></div>
+            <div class="col-md-3"><label class="form-label">Единица подсчёта</label><select class="form-select" name="group_by"><option value="applications" {% if selected_group_by == 'applications' %}selected{% endif %}>Рассмотрения по вакансиям</option><option value="candidates" {% if selected_group_by == 'candidates' %}selected{% endif %}>Уникальные кандидаты</option></select></div>
+            <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Применить</button></div>
+        </form>
+        <div class="row g-3 mb-4">{% for key, value in stats.items() %}<div class="col-md-3"><div class="metric-card p-3 rounded-4 border"><div class="small text-muted text-uppercase">{{ key }}</div><div class="fw-bold fs-4">{{ value }}</div></div></div>{% endfor %}</div>
+        <div class="row g-4">
+            <div class="col-lg-7"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h4 class="fw-semibold mb-3">Этапы</h4>
+                {% for step in funnel %}<a class="d-block text-decoration-none text-body mb-3" href="{{ url_for('main.candidates_page', funnel_stage=step.key, vacancy_id=selected_vacancy_id) }}"><div class="d-flex justify-content-between mb-1"><span>{{ step.label }}</span><span class="fw-semibold">{{ step.value }} · {{ step.conversion_from_initial }}%</span></div><div class="progress" style="height:12px"><div class="progress-bar bg-primary" style="width:{{ step.conversion_from_initial }}%"></div></div><div class="small text-muted mt-1">Потеря с предыдущего этапа: {{ step.dropped }}</div></a>{% endfor %}
+            </div></div></div>
+            <div class="col-lg-5"><div class="card shadow-sm border-0 h-100"><div class="card-body"><h4 class="fw-semibold mb-3">Выбывшие</h4><div class="d-flex justify-content-between border-bottom py-2"><span>Отклонены</span><strong>{{ funnel_data.outcomes.rejected }}</strong></div><div class="d-flex justify-content-between border-bottom py-2"><span>Отозвали кандидатуру</span><strong>{{ funnel_data.outcomes.withdrawn }}</strong></div><div class="d-flex justify-content-between py-2"><span>Перенесены</span><strong>{{ funnel_data.outcomes.transferred }}</strong></div><hr><div class="small text-muted">Перенос создаёт новое рассмотрение, но не увеличивает число уникальных кандидатов.</div></div></div></div>
+        </div>
+    </div></div>
+    <div class="col-12"><div class="card shadow-sm border-0"><div class="card-body"><h4 class="fw-semibold mb-3">Визуализация конверсии</h4><canvas id="funnelChart" height="100"></canvas></div></div></div>
+</div>
+<script id="funnelData" type="application/json">{{ funnel_data | tojson }}</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+base_model: Qwen/Qwen2.5-0.5B-Instruct
+train_file: data/chat/training_real/train.jsonl
+validation_file: data/chat/training_real/validation.jsonl
+output_dir: models/chat_model_real
+method: qlora
+epochs: 3
+learning_rate: 0.0002
+max_length: 4096
+seed: 42
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 8
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+allow_unapproved_synthetic: false

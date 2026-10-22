@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — {{ 'Редактирование вакансии' if vacancy else 'Новая вакансия' }}{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+                <h2 class="fw-bold mb-1">{{ 'Редактирование вакансии' if vacancy else 'Создание вакансии' }}</h2>
+                <p class="text-muted mb-0">Настройте параметры вакансии и индивидуальные веса критериев.</p>
+            </div>
+            <a class="btn btn-outline-secondary" href="{{ url_for('main.vacancies_page') }}">Отмена</a>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Название вакансии</label>
+                <input id="vacancyTitle" class="form-control" value="{{ vacancy.title if vacancy else '' }}" placeholder="Например: Senior Python Developer" required>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Категория</label>
+                <select id="vacancyCategory" class="form-select">
+                    {% for category in categories %}
+                    <option value="{{ category }}" {% if vacancy and vacancy.category == category %}selected{% endif %}>{{ category }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Статус</label>
+                <select id="vacancyStatus" class="form-select">
+                    <option value="active" {% if not vacancy or vacancy.status == 'active' %}selected{% endif %}>Активна</option>
+                    <option value="closed" {% if vacancy and vacancy.status == 'closed' %}selected{% endif %}>Закрыта</option>
+                </select>
+            </div>
+
+            <div class="col-12">
+                <label class="form-label">Описание</label>
+                <textarea id="vacancyDescription" class="form-control" rows="4" placeholder="Краткое описание роли и задач">{{ vacancy.description if vacancy else '' }}</textarea>
+            </div>
+
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Критические требования</label>
+                    <button id="addCriticalRequirementBtn" type="button" class="btn btn-sm btn-outline-primary">Добавить</button>
+                </div>
+                <div id="criticalRequirementsList" class="d-flex flex-column gap-2"></div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Навыки</label>
+                    <button id="addSkillBtn" type="button" class="btn btn-sm btn-outline-primary">Добавить</button>
+                </div>
+                <div id="skillsList" class="d-flex flex-column gap-2"></div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Требуемый опыт</label>
+                <input id="vacancyExperience" class="form-control" value="{{ vacancy.experience_required if vacancy else '' }}" placeholder="Например: от 3 лет">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Требуемое образование</label>
+                <input id="vacancyEducation" class="form-control" value="{{ vacancy.education_required if vacancy else '' }}" placeholder="Например: Высшее техническое">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Минимальный опыт, лет</label>
+                <input id="vacancyMinExperience" type="number" min="0" class="form-control" value="{{ vacancy.min_experience if vacancy and vacancy.min_experience is defined else 0 }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Максимальный опыт, лет</label>
+                <input id="vacancyMaxExperience" type="number" min="0" class="form-control" value="{{ vacancy.max_experience if vacancy and vacancy.max_experience is defined else 40 }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Специализация модели</label>
+                <input id="vacancySpecialization" class="form-control" value="{{ vacancy.specialization if vacancy and vacancy.specialization is defined else '' }}" placeholder="Например: IT">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Уровень образования для модели</label>
+                <select id="vacancyRequiredEducation" class="form-select">
+                    {% for value, label in [('none', 'Не требуется'), ('bachelor', 'Бакалавр/высшее'), ('master', 'Магистр'), ('phd', 'Учёная степень')] %}
+                    <option value="{{ value }}" {% if vacancy and vacancy.required_education is defined and vacancy.required_education == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Требуемый английский</label>
+                <select id="vacancyEnglish" class="form-select">
+                    {% for value in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] %}
+                    <option value="{{ value }}" {% if vacancy and vacancy.english_required is defined and vacancy.english_required == value %}selected{% endif %}>{{ value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check mb-2">
+                    <input id="vacancyManagementRequired" class="form-check-input" type="checkbox" {% if vacancy and vacancy.management_required %}checked{% endif %}>
+                    <label class="form-check-label" for="vacancyManagementRequired">Обязателен управленческий опыт</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Зарплата от, ₽</label>
+                <input id="vacancyMinSalary" type="number" min="0" class="form-control" value="{{ vacancy.min_salary if vacancy and vacancy.min_salary is defined else 0 }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Зарплата до, ₽</label>
+                <input id="vacancyMaxSalary" type="number" min="0" class="form-control" value="{{ vacancy.max_salary if vacancy and vacancy.max_salary is defined else 0 }}">
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <h5 class="fw-semibold mb-3">Веса критериев</h5>
+
+        <div class="row g-3">
+            {% for criterion in ['hard', 'soft', 'management', 'education', 'salary'] %}
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-1" for="vacancyWeight_{{ criterion }}">{{ criterion }}</label>
+                    <span class="small text-muted"><span id="vacancyWeightValue_{{ criterion }}">0</span>%</span>
+                </div>
+                <input id="vacancyWeight_{{ criterion }}" type="range" class="form-range vacancy-weight-slider" min="0" max="100" value="0">
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="p-3 rounded-3 border bg-light mt-3 mb-4">
+            <div class="fw-semibold">Сумма весов: <span id="vacancyWeightTotal">0</span>%</div>
+            <div id="vacancyWeightHint" class="small text-muted">Сумма должна быть ровно 100%.</div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <button id="saveVacancyBtn" class="btn btn-primary" type="button">Сохранить вакансию</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('main.vacancies_page') }}">Отмена</a>
+        </div>
+    </div>
+</div>
+
+<script id="vacancyEditData" type="application/json">
+{{ {
+    'vacancy': vacancy,
+    'default_weights': default_weights,
+    'is_edit': True if vacancy and vacancy.id else False,
+    'template_id': template_id
+} | tojson }}
+</script>
+{% endblock %}

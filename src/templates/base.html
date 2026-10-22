@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}HR Tech Platform{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">
+                <i class="fa-solid fa-briefcase me-2"></i>HR Tech OS
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house me-2"></i>Дашборд</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.candidates_page' %}active{% endif %}" href="{{ url_for('main.candidates_page') }}"><i class="fa-solid fa-users me-2"></i>Кандидаты</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.chat_page' %}active{% endif %}" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comments me-2"></i>Чат</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.documents_page' %}active{% endif %}" href="{{ url_for('main.documents_page') }}"><i class="fa-solid fa-file-lines me-2"></i>Документы</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint in ['main.vacancies_page', 'main.vacancy_new_page', 'main.vacancy_edit_page', 'main.templates_page'] %}active{% endif %}" href="{{ url_for('main.vacancies_page') }}"><i class="fa-solid fa-briefcase me-2"></i>Вакансии</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.interviews_page' %}active{% endif %}" href="{{ url_for('main.interviews_page') }}"><i class="fa-solid fa-calendar-days me-2"></i>Календарь</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.analytics_page' %}active{% endif %}" href="{{ url_for('main.analytics_page') }}"><i class="fa-solid fa-chart-line me-2"></i>Аналитика</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid py-4 px-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% if page_scripts %}
+    {% for script in page_scripts %}
+    <script src="{{ url_for('static', filename='js/' + script) }}"></script>
+    {% endfor %}
+    {% elif page_script %}
+    <script src="{{ url_for('static', filename='js/' + page_script) }}"></script>
+    {% endif %}
+</body>
+</html>

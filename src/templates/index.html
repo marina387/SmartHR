@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="hero-card rounded-4 p-4 p-lg-5 shadow-sm border">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                    <div>
+                        <div class="eyebrow">HR-Tech Platform</div>
+                        <h1 class="h3 fw-bold mb-2">Добро пожаловать, Анна Смирнова</h1>
+                        <p class="text-muted mb-0">Сегодня {{ today_label }}. Следите за новыми откликами, статусами и интервью.</p>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-circle">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold">Анна Смирнова</div>
+                            <div class="small text-muted">Head of Talent Acquisition</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 rounded-4">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="avatar-circle" style="width: 46px; height: 46px;">
+                            <i class="fa-solid fa-file-lines"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Новых кандидатов</div>
+                            <div class="h3 fw-bold mb-0">{{ stats.new_candidates }}</div>
+                        </div>
+                    </div>
+                    <p class="text-muted mb-0">Ожидают первичного обзора и оценки.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 rounded-4">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="avatar-circle" style="width: 46px; height: 46px;">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Одобрено сегодня</div>
+                            <div class="h3 fw-bold mb-0">{{ stats.approved_today }}</div>
+                        </div>
+                    </div>
+                    <p class="text-muted mb-0">Кандидаты, переведённые в статус одобрения.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 rounded-4">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="avatar-circle" style="width: 46px; height: 46px;">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Интервью сегодня</div>
+                            <div class="h3 fw-bold mb-0">{{ stats.interviews_today }}</div>
+                        </div>
+                    </div>
+                    <p class="text-muted mb-0">Запланированные встречи и собеседования.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm h-100 rounded-4">
+                <div class="card-body">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <h2 class="h5 fw-bold mb-1">Быстрый доступ</h2>
+                            <p class="text-muted mb-0">Откройте нужный раздел за один клик.</p>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        <a class="btn btn-outline-primary" href="{{ url_for('main.candidates_page') }}"><i class="fa-solid fa-users me-2"></i>Все кандидаты</a>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualCandidateModal"><i class="fa-solid fa-user-plus me-2"></i>Добавить вручную</button>
+                        <a class="btn btn-outline-primary" href="{{ url_for('main.analytics_page') }}"><i class="fa-solid fa-chart-line me-2"></i>Аналитика</a>
+                        <a class="btn btn-outline-primary" href="{{ url_for('main.vacancies_page') }}"><i class="fa-solid fa-briefcase me-2"></i>Вакансии</a>
+                        <a class="btn btn-outline-primary" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comments me-2"></i>Чат-ассистент</a>
+                        <a class="btn btn-outline-primary" href="{{ url_for('main.documents_page') }}"><i class="fa-solid fa-file-lines me-2"></i>Документы</a>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3 class="h6 fw-bold mb-0">Последние кандидаты</h3>
+                        <a class="small text-decoration-none" href="{{ url_for('main.candidates_page') }}">Показать все</a>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        {% for candidate in recent_candidates %}
+                        <a class="list-group-item px-0 py-3 d-flex justify-content-between align-items-center text-decoration-none text-dark" href="{{ url_for('main.candidate_detail', candidate_id=candidate.id) }}">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="avatar-circle" style="width: 44px; height: 44px;">
+                                    <i class="fa-solid fa-user"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">{{ candidate.name }}</div>
+                                    <div class="small text-muted">{{ candidate.position }} · {{ candidate.score }}%</div>
+                                </div>
+                            </div>
+                            <span class="badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.label }}</span>
+                        </a>
+                        {% else %}
+                        <div class="text-muted">Кандидатов ещё нет.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm h-100 rounded-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h2 class="h5 fw-bold mb-1">Последнее в чате</h2>
+                            <p class="text-muted mb-0">Краткий обзор последних действий.</p>
+                        </div>
+                        <a class="btn btn-sm btn-primary" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-paper-plane me-2"></i>Открыть</a>
+                    </div>
+                    <div class="p-3 rounded-4 bg-light border">
+                        <div class="fw-semibold mb-2">{{ chat_summary.title }}</div>
+                        <p class="text-muted mb-0">{{ chat_summary.message }}</p>
+                    </div>
+                    <div class="mt-4">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div class="avatar-circle" style="width: 42px; height: 42px;">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">Ассистент</div>
+                                <div class="small text-muted">Нашёл 3 кандидата по ключевым критериям вакансии</div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="avatar-circle" style="width: 42px; height: 42px;">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <div>
+                                <div class="fw-semibold">Вы</div>
+                                <div class="small text-muted">Покажи детально Смирнова</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="manualCandidateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить кандидата вручную</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Имя кандидата</label>
+                        <input id="manualCandidateName" class="form-control" placeholder="Например: Иванов Алексей Петрович">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Должность</label>
+                        <input id="manualCandidatePosition" class="form-control" placeholder="Например: Специалист по работе с клиентами">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Вакансия</label>
+                        <select id="manualCandidateVacancy" class="form-select">
+                            {% for vacancy in vacancies %}
+                            <option value="{{ vacancy.id }}" {% if vacancy.id == initial_vacancy_id %}selected{% endif %}>{{ vacancy.id }} — {{ vacancy.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Текст резюме</label>
+                        <textarea id="manualCandidateText" class="form-control" rows="8" placeholder="Укажите опыт, навыки, образование, достижения и зарплатные ожидания"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="manualCandidateSaveBtn" type="button" class="btn btn-primary">Сохранить кандидата</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

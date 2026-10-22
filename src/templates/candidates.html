@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block title %}HR Tech Platform — Кандидаты{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <h2 class="fw-bold mb-1">Список кандидатов</h2>
+                <p class="text-muted mb-0">Фильтруйте, ищите и сравнивайте резюме по оценкам и статусам.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary"><i class="fa-solid fa-download me-2"></i>Экспорт</button>
+                <button class="btn btn-outline-primary"><i class="fa-solid fa-code-compare me-2"></i>Сравнить</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualCandidateModal"><i class="fa-solid fa-user-plus me-2"></i>Добавить вручную</button>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-lg-4">
+                <label class="form-label small text-uppercase">Поиск</label>
+                <form method="get" class="d-flex gap-2">
+                    <input type="text" class="form-control" name="q" value="{{ query }}" placeholder="Имя или навык">
+                    <button class="btn btn-primary" type="submit"><i class="fa-solid fa-search"></i></button>
+                </form>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label small text-uppercase">Должность</label>
+                <select class="form-select" name="position" form="filtersForm">
+                    <option value="all">Все</option>
+                    {% for position in positions %}
+                    <option value="{{ position }}" {% if selected_position == position %}selected{% endif %}>{{ position }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label small text-uppercase">Статус</label>
+                <select class="form-select" name="status" form="filtersForm">
+                    <option value="all" {% if selected_status == 'all' %}selected{% endif %}>Все</option>
+                    <option value="green" {% if selected_status == 'green' %}selected{% endif %}>Одобрен</option>
+                    <option value="yellow" {% if selected_status == 'yellow' %}selected{% endif %}>На проверке</option>
+                    <option value="red" {% if selected_status == 'red' %}selected{% endif %}>Отклонён</option>
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label small text-uppercase">Оценка</label>
+                <select class="form-select" name="score" form="filtersForm">
+                    <option value="all" {% if selected_score == 'all' %}selected{% endif %}>Все</option>
+                    <option value=">70" {% if selected_score == '>70' %}selected{% endif %}>Больше 70</option>
+                    <option value="40-70" {% if selected_score == '40-70' %}selected{% endif %}>40–70</option>
+                    <option value="<40" {% if selected_score == '<40' %}selected{% endif %}>Меньше 40</option>
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label small text-uppercase">Дата</label>
+                <select class="form-select" name="date" form="filtersForm">
+                    <option value="all" {% if selected_date == 'all' %}selected{% endif %}>Все</option>
+                    <option value="today" {% if selected_date == 'today' %}selected{% endif %}>Сегодня</option>
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <label class="form-label small text-uppercase">База</label>
+                <select class="form-select" name="lifecycle" form="filtersForm">
+                    <option value="active" {% if selected_lifecycle == 'active' %}selected{% endif %}>Активные</option>
+                    <option value="archived" {% if selected_lifecycle == 'archived' %}selected{% endif %}>Архив</option>
+                    <option value="all" {% if selected_lifecycle == 'all' %}selected{% endif %}>Все</option>
+                </select>
+            </div>
+        </div>
+
+        <form id="filtersForm" method="get" class="mb-4">
+            <input type="hidden" name="q" value="{{ query }}">
+            <button class="btn btn-primary" type="submit"><i class="fa-solid fa-filter me-2"></i>Применить фильтры</button>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Имя</th>
+                        <th>Должность</th>
+                        <th>Оценка</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for candidate in candidates %}
+                    <tr>
+                        <td>{{ loop.index + (page - 1) * 6 }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ candidate.name }}</div>
+                            <div class="small text-muted">{{ candidate.email }}</div>
+                        </td>
+                        <td>{{ candidate.position }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ candidate.score }}</div>
+                            <div class="small text-muted">/ 100</div>
+                        </td>
+                        <td>
+                            {% if candidate.lifecycle_status == 'archived' %}
+                            <span class="badge rounded-pill bg-secondary">📦 Архив</span>
+                            {% else %}
+                            <span class="status-badge badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.icon }} {{ candidate.status_meta.label }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-primary me-2" href="{{ url_for('main.candidate_detail', candidate_id=candidate.id) }}"><i class="fa-solid fa-eye me-1"></i>Открыть</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comment-dots me-1"></i>Чат</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">Кандидаты не найдены.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <nav class="mt-4" aria-label="Pagination">
+            <ul class="pagination justify-content-center">
+                {% if page > 1 %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('main.candidates_page', q=query, status=selected_status, position=selected_position, score=selected_score, date=selected_date, page=page-1) }}">Назад</a></li>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}"><a class="page-link" href="{{ url_for('main.candidates_page', q=query, status=selected_status, position=selected_position, score=selected_score, date=selected_date, page=p) }}">{{ p }}</a></li>
+                {% endfor %}
+                {% if page < total_pages %}
+                <li class="page-item"><a class="page-link" href="{{ url_for('main.candidates_page', q=query, status=selected_status, position=selected_position, score=selected_score, date=selected_date, page=page+1) }}">Вперёд</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+
+<div class="modal fade" id="manualCandidateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить кандидата вручную</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Имя кандидата</label>
+                        <input id="manualCandidateName" class="form-control" placeholder="Например: Петрова Мария Сергеевна">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Должность</label>
+                        <input id="manualCandidatePosition" class="form-control" placeholder="Например: Финансовый аналитик">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Вакансия</label>
+                        <select id="manualCandidateVacancy" class="form-select">
+                            {% for vacancy in vacancies %}
+                            <option value="{{ vacancy.id }}" {% if vacancy.id == initial_vacancy_id %}selected{% endif %}>{{ vacancy.id }} — {{ vacancy.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Текст резюме</label>
+                        <textarea id="manualCandidateText" class="form-control" rows="8" placeholder="Опишите опыт, навыки, образование и зарплатные ожидания"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button id="manualCandidateSaveBtn" type="button" class="btn btn-primary">Сохранить кандидата</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
