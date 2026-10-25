@@ -57,6 +57,7 @@ class FakeHistory:
 def fake_chat_history(monkeypatch):
     history = FakeHistory()
     monkeypatch.setattr(main_routes, "_chat_history_service", lambda: history)
+    monkeypatch.setattr(main_routes, "vacancy_service", make_service().tools.vacancies)
     return history
 
 

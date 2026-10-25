@@ -436,6 +436,124 @@ def test_closed_stage_cannot_be_bypassed_by_chat_or_calendar_edit(system):
     assert system.put('/api/interviews/'+item['id'],json={'status':'cancelled'}).status_code==200
 
 
+@pytest.mark.parametrize('method,url',[
+    ('POST','/api/chat'),('POST','/api/chat/actions/confirm'),
+    ('POST','/api/chat/messages/1/feedback'),('POST','/api/score'),
+    ('POST','/api/parse_requirements'),('POST','/api/parse_hh'),('POST','/api/upload'),
+    ('POST','/api/candidates/manual'),('POST','/api/candidates/CV_ANNA/stage'),
+    ('POST','/api/candidates/CV_ANNA/vacancies'),('POST','/api/interviews'),
+    ('PUT','/api/interviews/unknown'),('POST','/api/feedback'),('POST','/api/feedback/decision'),
+    ('POST','/api/vacancies'),('PUT','/api/vacancies/VAC_SYS'),
+    ('POST','/api/templates'),('PUT','/api/templates/unknown'),('POST','/api/simulate'),
+])
+def test_api_rejects_non_object_and_broken_json_without_writes(system,method,url):
+    before=sql_snapshot()
+    for payload in ('[]','[1]','null','"hello"','12','true','{"broken":'):
+        response=system.open(url,method=method,data=payload,content_type='application/json')
+        assert response.status_code==400,(url,payload,response.get_data(as_text=True))
+        assert response.is_json and response.get_json().get('error')
+    assert sql_snapshot()==before
+
+
+@pytest.mark.parametrize('url,payload',[
+    ('/api/chat',{'message':123}),('/api/chat',{'history':[1]}),
+    ('/api/chat',{'history':[{'role':'user','content':{}}]}),
+    ('/api/chat',{'history':[{'role':{},'content':'hello'}]}),
+    ('/api/score',{'candidate_text':None}),('/api/score',{'critical_requirements':{}}),
+    ('/api/score',{'weights':'not-json'}),('/api/score',{'weights':[1]}),
+    ('/api/score',{'weights':{'hard':float('nan')}}),
+    ('/api/score',{'weights':{'hard':-1}}),('/api/score',{'weights':{'hard':True}}),
+    ('/api/parse_hh',{'url':[]}),('/api/interviews',{'duration':False}),
+    ('/api/interviews',{'duration':1.5}),('/api/interviews',{'duration':1441}),
+    ('/api/interviews',{'duration':None}),('/api/interviews',{'date':'2026-02-30'}),
+    ('/api/interviews',{'time':'25:00'}),('/api/interviews',{'date':'2026-1-1'}),
+    ('/api/feedback',{'corrected_scores':[]}),
+    ('/api/feedback/decision',{'decision':True}),
+    ('/api/vacancies',{'min_experience':-1}),('/api/vacancies',{'min_salary':100,'max_salary':50}),
+    ('/api/vacancies',{'management_required':'false'}),
+])
+def test_api_rejects_wrong_field_types_and_ranges(system,url,payload):
+    before=sql_snapshot()
+    response=system.post(url,json=payload)
+    assert response.status_code==400,response.get_data(as_text=True)
+    assert response.is_json and response.get_json()['error']
+    assert sql_snapshot()==before
+
+
+def test_api_file_errors_and_media_type_are_clear(system):
+    for name,data in [('broken.pdf',b'broken'),('broken.docx',b'PKbroken'),
+                      ('old.doc',b'old'),('bad.txt',b'\xff\xfe')]:
+        response=system.post('/api/upload',data={'file':(BytesIO(data),name)})
+        assert response.status_code==400 and response.is_json
+    response=system.post('/api/chat',data='message=hello',content_type='application/x-www-form-urlencoded')
+    assert response.status_code==415 and response.is_json
+
+
+def test_missing_api_entities_return_404_without_partial_records(system):
+    before=sql_snapshot()
+    for url,payload in [('/api/score',{'candidate_text':'Python','vacancy_id':'missing'}),
+                        ('/api/candidates/manual',{'name':'Тест','position':'IT','resume_text':'Python','vacancy_id':'missing'}),
+                        ('/api/candidates/missing/stage',{'vacancy_id':'VAC_SYS','stage':'offer'}),
+                        ('/api/feedback',{'candidate_id':'missing'}),
+                        ('/api/feedback/decision',{'candidate_id':'missing','vacancy_id':'VAC_SYS','decision':1}),
+                        ('/api/simulate',{'vacancy_id':'missing'}),
+                        ('/api/vacancies',{'title':'Test','template_id':'missing'})]:
+        assert system.post(url,json=payload).status_code==404,url
+    assert sql_snapshot()==before
+
+
+def test_missing_chat_vacancy_and_cancelled_interview_do_not_reach_fk_errors(system):
+    before=sql_snapshot()
+    response=system.post('/api/chat',json={'message':'Привет','vacancy_id':'missing'})
+    assert response.status_code==400
+    response=system.post('/api/interviews',json={'candidate_id':'missing','vacancy_id':'VAC_SYS',
+        'candidate_name':'Тест','status':'cancelled','date':'2099-10-22','time':'16:00','duration':60,'format':'online'})
+    assert response.status_code==400
+    assert sql_snapshot()==before
+
+
+def test_conflicting_delete_returns_409_and_preserves_records(system):
+    before=sql_snapshot()
+    response=system.delete('/api/vacancies/VAC_SYS')
+    assert response.status_code==409,response.get_json()
+    assert sql_snapshot()==before
+
+
+def test_api_server_failure_does_not_expose_internal_details(system,monkeypatch):
+    def fail(*args,**kwargs):
+        raise RuntimeError('private-file-path-and-secret')
+    monkeypatch.setattr(routes.scoring_service,'score_candidate',fail)
+    response=system.post('/api/score',json={'candidate_text':'Python','vacancy_id':'VAC_SYS'})
+    assert response.status_code==500 and response.is_json
+    assert 'private-file-path-and-secret' not in response.get_data(as_text=True)
+
+
+def test_hh_import_reports_timeouts_and_remote_errors(system,monkeypatch):
+    import requests
+    for error,status in [(requests.Timeout('private-timeout'),504),(requests.ConnectionError('private-host'),502)]:
+        def fail(*args,**kwargs):
+            raise error
+        monkeypatch.setattr(routes,'parse_hh_url',fail)
+        response=system.post('/api/parse_hh',json={'url':'https://hh.ru/resume/abc'})
+        assert response.status_code==status and response.is_json
+        assert 'private-' not in response.get_data(as_text=True)
+
+
+def test_api_request_size_limit_returns_json(system,monkeypatch):
+    monkeypatch.setitem(system.application.config,'MAX_CONTENT_LENGTH',128)
+    response=system.post('/api/chat',json={'message':'x'*256})
+    assert response.status_code==413 and response.is_json
+
+
+def test_partial_vacancy_update_validates_resulting_range(system):
+    vacancy=routes.vacancy_service.get_by_id('VAC_SYS')
+    routes.vacancy_storage.save({**vacancy,'min_experience':0,'max_experience':5})
+    before=sql_snapshot()
+    response=system.put('/api/vacancies/VAC_SYS',json={'min_experience':10})
+    assert response.status_code==400 and response.is_json
+    assert sql_snapshot()==before
+
+
 
 def test_edit_interview_form_and_full_update(system):
     item=schedule(system)

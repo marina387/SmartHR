@@ -156,6 +156,7 @@ def test_interview_crud(client: Any, isolated_feature_storage: None) -> None:
 
 def test_candidate_stage_is_selected_after_page_reload(client: Any, isolated_feature_storage: None) -> None:
     """Сохранённый этап должен оставаться выбранным после повторного открытия карточки."""
+    main_routes.vacancy_service.create({"id":"VAC_STAGE","title":"Аналитик","status":"active"})
     main_routes.storage.save_candidate({
         "id": "CV_STAGE", "name": "Тестовый кандидат", "position": "Аналитик",
         "vacancy_id": "VAC_STAGE", "resume_text": "SQL, аналитика", "total": 70,

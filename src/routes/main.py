@@ -17,6 +17,9 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from src.services.app_time import local_now
 from src.services.transactions import transactional_request
+from src.services.api_validation import validate_api_request, api_http_error, api_internal_error, sanitize_api_errors
+from werkzeug.exceptions import HTTPException
+from sqlalchemy.exc import IntegrityError
 from src.chat import ChatService, SmartHRChatTools, build_chat_model
 from src.config import DEMO_RESUMES, FUNNEL_STAGES, FUNNEL_TERMINAL_STATUSES, MAX_CONTENT_LENGTH
 from src.core.rag_pipeline import RagPipeline
@@ -41,6 +44,10 @@ from src.storage.sql_storage import (
 )
 
 main_bp = Blueprint("main", __name__)
+main_bp.before_request(validate_api_request)
+main_bp.after_request(sanitize_api_errors)
+main_bp.register_error_handler(HTTPException, api_http_error)
+main_bp.register_error_handler(Exception, api_internal_error)
 scoring_service = CandidateScoringService()
 storage = SqlCandidateStorage()
 vacancy_storage = SqlVacancyStorage()
@@ -570,6 +577,8 @@ def chat_api():
                 candidate_id = str(selected["id"])
         if candidate_id and not storage.get_candidate(candidate_id):
             raise ValueError("Кандидат не найден. Начните новый диалог или выберите другого кандидата.")
+        if vacancy_id and not vacancy_service.get_by_id(vacancy_id):
+            raise ValueError("Вакансия не найдена. Выберите существующую вакансию.")
         result = _chat_service().ask(
             message_text,
             candidate_id=candidate_id,
@@ -1024,6 +1033,8 @@ def create_vacancy_api():
         payload = body
         if template_id:
             template = template_service.get_by_id(template_id)
+            if not template:
+                return jsonify({"error": "Шаблон не найден"}), 404
             if template:
                 payload = {
                     **template,
@@ -1070,6 +1081,8 @@ def delete_vacancy_api(vacancy_id: str):
         message = str(exc)
         status = 404 if "не найдена" in message else 400
         return jsonify({"error": message}), status
+    except IntegrityError:
+        return jsonify({"error": "Вакансия связана с кандидатами или историей. Закройте её вместо удаления."}), 409
     except Exception as exc:
         return jsonify({"error": f"Ошибка удаления вакансии: {exc}"}), 500
 
@@ -1171,6 +1184,8 @@ def score_candidate():
         weights = vacancy_service.get_default_weights()
 
     vacancy = vacancy_service.get_by_id(vacancy_id) if vacancy_id else None
+    if vacancy_id and not vacancy:
+        return jsonify({"error": "Вакансия не найдена"}), 404
     result = scoring_service.score_candidate(candidate_text, critical_requirements, weights, vacancy=vacancy)
     result["used_weights"] = weights
     result["vacancy_id"] = vacancy_id or None
@@ -1206,10 +1221,10 @@ def upload_file():
         try:
             if filename.endswith(".pdf"):
                 text = parse_pdf(file.stream)
-            elif filename.endswith((".docx", ".doc")):
+            elif filename.endswith(".docx"):
                 text = parse_docx(file.stream)
             elif filename.endswith(".txt"):
-                text = file.stream.read().decode("utf-8", errors="ignore")
+                text = file.stream.read().decode("utf-8-sig")
             else:
                 return jsonify({"error": "Поддерживаются форматы: TXT, PDF, DOCX"}), 400
 
@@ -1218,8 +1233,9 @@ def upload_file():
 
             return jsonify({"text": text, "filename": file.filename})
 
-        except Exception as exc:
-            return jsonify({"error": f"Ошибка парсинга: {exc}"}), 500
+        except Exception:
+            current_app.logger.exception("Resume file parsing failed")
+            return jsonify({"error": "Не удалось прочитать файл. Проверьте формат и целостность. TXT должен быть в UTF-8."}), 400
 
     if request.form.get("text"):
         text = request.form.get("text", "").strip()
@@ -1235,16 +1251,19 @@ def parse_hh():
         return jsonify({"error": "Укажите поле 'url'"}), 400
 
     url = body["url"].strip()
-    if "hh.ru" not in url:
-        return jsonify({"error": "Укажите ссылку на hh.ru"}), 400
-
     try:
         text = parse_hh_url(url)
         if not text.strip():
             return jsonify({"error": "Не удалось извлечь текст"}), 400
         return jsonify({"text": text, "source": url})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
-        return jsonify({"error": f"Ошибка парсинга hh.ru: {exc}"}), 500
+        import requests
+        if isinstance(exc, requests.Timeout):
+            return jsonify({"error": "hh.ru не ответил вовремя. Повторите попытку позже."}), 504
+        current_app.logger.exception("HH resume import failed")
+        return jsonify({"error": "Не удалось получить резюме с hh.ru. Проверьте доступность ссылки."}), 502
 
 
 @main_bp.route("/api/candidates", methods=["GET"])
@@ -1266,6 +1285,8 @@ def create_candidate_manual():
         return jsonify({"error": "Поля name, position и resume_text обязательны"}), 400
 
     vacancy = vacancy_service.get_by_id(vacancy_id)
+    if not vacancy:
+        return jsonify({"error": "Вакансия не найдена"}), 404
     critical_requirements = body.get("critical_requirements") or (vacancy.get("critical_requirements", []) if vacancy else [])
     if isinstance(critical_requirements, str):
         critical_requirements = [item.strip() for item in critical_requirements.split("\n") if item.strip()]
@@ -1363,6 +1384,10 @@ def update_candidate_stage(candidate_id: str):
     stage = str(body.get("stage", "")).strip()
     if not vacancy_id or not stage:
         return jsonify({"error": "vacancy_id и stage обязательны"}), 400
+    if not storage.get_candidate(candidate_id):
+        return jsonify({"error": "Кандидат не найден"}), 404
+    if not vacancy_service.get_by_id(vacancy_id):
+        return jsonify({"error": "Вакансия не найдена"}), 404
     try:
         record = candidate_stage_service.transition(
             candidate_id, vacancy_id, stage,
@@ -1455,17 +1480,17 @@ def _sync_interview_stage(record, hr_id="HR_SYSTEM"):
 
 def _validate_interview_application(record):
     """Do not create an active interview with no eligible candidate/application."""
-    if record.get("status", "scheduled") == "cancelled":
-        return
     candidate_id, vacancy_id = str(record.get("candidate_id", "")), str(record.get("vacancy_id", ""))
     candidate = storage.get_candidate(candidate_id)
     if not candidate:
         raise ValueError("Кандидат не найден")
-    if candidate.get("lifecycle_status", "active") != "active":
-        raise ValueError("Сначала восстановите кандидата из архива")
     vacancy = vacancy_service.get_by_id(vacancy_id)
     if not vacancy:
         raise ValueError("Вакансия не найдена")
+    if record.get("status", "scheduled") == "cancelled":
+        return
+    if candidate.get("lifecycle_status", "active") != "active":
+        raise ValueError("Сначала восстановите кандидата из архива")
     if str(vacancy.get("status", "active")).casefold() not in {"active", "активна"}:
         raise ValueError("Нельзя назначить интервью по неактивной вакансии")
     relation = candidate_vacancy_storage.find(candidate_id, vacancy_id)
@@ -1537,6 +1562,10 @@ def list_feedback(candidate_id: str):
 def create_feedback():
     """Сохраняет корректировку оценок HR-специалистом."""
     body = request.get_json(silent=True) or {}
+    if body.get("candidate_id") and not storage.get_candidate(body["candidate_id"]):
+        return jsonify({"error": "Кандидат не найден"}), 404
+    if body.get("vacancy_id") and not vacancy_service.get_by_id(body["vacancy_id"]):
+        return jsonify({"error": "Вакансия не найдена"}), 404
     try:
         record = feedback_service.create(body)
         return jsonify(record), 201
@@ -1571,6 +1600,8 @@ def create_feedback_decision():
     # Считаем фичи через новую модель, чтобы сохранить контекст решения.
     candidate = next((c for c in storage.list_candidates() if str(c.get("id")) == candidate_id), None)
     vacancy = vacancy_service.get_by_id(vacancy_id)
+    if not candidate or not vacancy:
+        return jsonify({"error": "Кандидат или вакансия не найдены"}), 404
     model_probability = None
     features = {}
     if candidate and vacancy:
@@ -1619,6 +1650,7 @@ def simulate():
         body = {
             "critical_requirements": request.form.getlist("critical_requirements"),
             "weights": request.form.get("weights", {}),
+            "vacancy_id": request.form.get("vacancy_id", "VAC_001"),
         }
 
     if isinstance(body.get("weights"), str):
@@ -1629,12 +1661,14 @@ def simulate():
 
     critical_requirements = body.get("critical_requirements", [])
     weights = body.get("weights", {})
-    vacancy_id = str(body.get("vacancy_id", "")).strip()
+    vacancy_id = str(body.get("vacancy_id") or "VAC_001").strip() or "VAC_001"
     if vacancy_id:
         weights = vacancy_service.weights_for_vacancy(vacancy_id)
 
     demo = random.choice(DEMO_RESUMES)
     vacancy = vacancy_service.get_by_id(vacancy_id) if vacancy_id else None
+    if not vacancy:
+        return jsonify({"error": "Вакансия не найдена"}), 404
     result = scoring_service.score_candidate(demo["text"], critical_requirements, weights, vacancy=vacancy)
 
     candidate = {

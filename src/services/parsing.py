@@ -3,6 +3,7 @@
 
 import io
 import re
+from urllib.parse import urlsplit
 from typing import List
 
 from src.config import REQUIREMENT_MARKERS
@@ -57,10 +58,28 @@ def parse_docx(stream) -> str:
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
 
+def validate_hh_url(url: str) -> str:
+    """Only direct HTTPS resume links on HH's explicitly permitted hosts."""
+    try:
+        if not isinstance(url, str) or any(char.isspace() or ord(char) < 32 for char in url):
+            raise ValueError
+        parts = urlsplit(url)
+        if (parts.scheme != "https" or parts.hostname not in {"hh.ru", "www.hh.ru"}
+                or parts.username is not None or parts.password is not None
+                or parts.port not in {None, 443} or parts.fragment
+                or not re.fullmatch(r"/resume/[A-Za-z0-9]+/?", parts.path)):
+            raise ValueError
+    except ValueError:
+        raise ValueError("Укажите прямую HTTPS-ссылку вида https://hh.ru/resume/ID") from None
+    return url
+
+
 def parse_hh_url(url: str) -> str:
     """Скачивает страницу hh.ru с User-Agent и извлекает текст резюме."""
     import requests
     from bs4 import BeautifulSoup
+
+    url = validate_hh_url(url)
 
     headers = {
         "User-Agent": (
@@ -70,10 +89,21 @@ def parse_hh_url(url: str) -> str:
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
-    response = requests.get(url, headers=headers, timeout=15)
-    response.raise_for_status()
+    response = requests.get(url, headers=headers, timeout=(5, 15), allow_redirects=False, stream=True)
+    try:
+        if 300 <= response.status_code < 400:
+            raise ValueError("hh.ru перенаправил запрос. Скопируйте прямую ссылку на резюме.")
+        response.raise_for_status()
+        content = bytearray()
+        for chunk in response.iter_content(chunk_size=65536):
+            content.extend(chunk)
+            if len(content) > 2 * 1024 * 1024:
+                raise ValueError("Страница резюме превышает допустимый размер (2 МБ)")
+        html = content.decode(response.encoding or "utf-8", errors="replace")
+    finally:
+        response.close()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
 
     resume_block = soup.find("div", {"data-field": "resume_block"})
     if resume_block:

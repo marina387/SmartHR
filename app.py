@@ -21,6 +21,11 @@ from src.routes.main import main_bp  # noqa: E402
 
 app.register_blueprint(main_bp)
 
+# Unknown routes and methods are resolved before a blueprint is selected.
+from src.services.api_validation import api_http_error
+app.register_error_handler(404, api_http_error)
+app.register_error_handler(405, api_http_error)
+
 @app.errorhandler(413)
 def upload_too_large(error):
     from flask import jsonify, request, redirect, url_for

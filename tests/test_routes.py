@@ -21,6 +21,14 @@ def client() -> Any:
         yield client
 
 
+def test_unknown_api_route_and_wrong_method_return_json(client: Any) -> None:
+    missing = client.get('/api/does-not-exist')
+    assert missing.status_code == 404 and missing.is_json
+    wrong_method = client.get('/api/score')
+    assert wrong_method.status_code == 405 and wrong_method.is_json
+    assert client.get('/does-not-exist').status_code == 404
+
+
 @pytest.fixture
 def isolated_vacancy_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> VacancyService:
     """Подменяет хранилище вакансий на временное для изоляции тестов."""

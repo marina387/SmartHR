@@ -118,6 +118,15 @@ class VacancyService:
         if sum(weights.values()) != 100:
             raise ValueError("Сумма весов должна быть равна 100")
 
+        min_experience = self._as_non_negative_number(data.get("min_experience"), 0)
+        max_experience = self._as_non_negative_number(data.get("max_experience"), 40)
+        min_salary = self._as_non_negative_number(data.get("min_salary"), 0)
+        max_salary = self._as_non_negative_number(data.get("max_salary"), 0)
+        if min_experience > max_experience:
+            raise ValueError("Минимальный опыт не должен превышать максимальный")
+        if max_salary and min_salary > max_salary:
+            raise ValueError("Минимальная зарплата не должна превышать максимальную")
+
         return {
             "title": title,
             "name": title,
@@ -128,14 +137,14 @@ class VacancyService:
             "skills": self._as_list(data.get("skills")),
             "required_skills": self._as_list(data.get("required_skills")) or self._as_list(data.get("critical_requirements")),
             "experience_required": str(data.get("experience_required", "")).strip(),
-            "min_experience": self._as_non_negative_number(data.get("min_experience"), 0),
-            "max_experience": self._as_non_negative_number(data.get("max_experience"), 40),
+            "min_experience": min_experience,
+            "max_experience": max_experience,
             "education_required": str(data.get("education_required", "")).strip(),
             "required_education": str(data.get("required_education", "none")).strip() or "none",
             "english_required": str(data.get("english_required", "A1")).strip() or "A1",
             "specialization": str(data.get("specialization", data.get("category", ""))).strip(),
-            "min_salary": self._as_non_negative_number(data.get("min_salary"), 0),
-            "max_salary": self._as_non_negative_number(data.get("max_salary"), 0),
+            "min_salary": min_salary,
+            "max_salary": max_salary,
             "management_required": bool(data.get("management_required", False)),
             "weights": weights,
             "status": str(data.get("status", "active")).strip() or "active",
