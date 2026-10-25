@@ -18,6 +18,7 @@ from app import app
 from src.extensions import db
 from src.models import ScoreResult
 from src.storage.sql_storage import (
+    atomic_write,
     SqlCandidateStorage, SqlCandidateVacancyStorage, SqlFeedbackStorage,
     SqlInterviewStorage, SqlStageEventStorage, SqlTemplateStorage,
     SqlTransferStorage, SqlVacancyStorage,
@@ -72,6 +73,7 @@ def backup_sources() -> Path:
     return target
 
 
+@atomic_write
 def migrate() -> dict[str, int]:
     counts: dict[str, int] = {}
     for filename, repository in SOURCES:
@@ -104,7 +106,7 @@ def migrate() -> dict[str, int]:
             },
         ))
         added_scores += 1
-    db.session.commit()
+    db.session.flush()
     counts["score_results"] = added_scores
     return counts
 

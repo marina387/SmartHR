@@ -12,7 +12,24 @@ class PayloadMixin:
     payload: Mapped[dict] = mapped_column(db.JSON, default=dict, nullable=False)
 
     def as_dict(self) -> dict:
-        return {**(self.payload or {}), "id": self.id}
+        result = {**(self.payload or {}), "id": self.id}
+        # SET NULL / CASCADE are applied by SQLite, which cannot update JSON payloads.
+        # Relational columns are the source of truth for links, including null links.
+        for column in self.__table__.columns:
+            if column.foreign_keys:
+                result[column.name] = getattr(self, column.name)
+        return result
+
+
+class IntegrityArchive(db.Model):
+    """Original rows isolated during explicit integrity repair; never used as live data."""
+    __tablename__ = "integrity_archive"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    source_table: Mapped[str] = mapped_column(db.String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(db.String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(db.Text, nullable=False)
+    original_row: Mapped[dict] = mapped_column(db.JSON, nullable=False)
+    archived_at: Mapped[str] = mapped_column(db.String(40), nullable=False)
 
 
 class Candidate(db.Model, PayloadMixin):

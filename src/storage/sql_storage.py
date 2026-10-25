@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Type
+from functools import wraps
 
 from sqlalchemy import select, func
 
@@ -12,6 +13,27 @@ from src.models import (
     ChatAction, ChatConversation, ChatMessage, ChatResponseFeedback,
     Feedback, Interview, ScoreResult, Vacancy, VacancyTemplate, VacancyWeight,
 )
+
+
+def atomic_write(method):
+    """Nested repository writes share one commit and roll back on failure."""
+    @wraps(method)
+    def wrapped(*args, **kwargs):
+        session = db.session()
+        outer = not session.info.get("repository_write_depth", 0)
+        session.info["repository_write_depth"] = session.info.get("repository_write_depth", 0) + 1
+        try:
+            result = method(*args, **kwargs)
+            if outer:
+                session.commit()
+            return result
+        except Exception:
+            if outer:
+                session.rollback()
+            raise
+        finally:
+            session.info["repository_write_depth"] -= 1
+    return wrapped
 
 
 class SqlRepository:
@@ -49,6 +71,7 @@ class SqlRepository:
         names = {column.name for column in self.model.__table__.columns} - {"payload"}
         return {key: payload.get(key) for key in names if key in payload}
 
+    @atomic_write
     def save(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         record = dict(payload)
         record_id = str(record.get("id", "")).strip() or self._next_id()
@@ -62,23 +85,25 @@ class SqlRepository:
             for key, value in columns.items():
                 setattr(model, key, value)
             model.payload = record
-        db.session.commit()
+        db.session.flush()
         return self._serialize(model)
 
+    @atomic_write
     def delete(self, record_id: str) -> bool:
         model = db.session.get(self.model, str(record_id))
         if not model:
             return False
         db.session.delete(model)
-        db.session.commit()
+        db.session.flush()
         return True
 
+    @atomic_write
     def save_all(self, items: List[Dict[str, Any]]) -> None:
         wanted = {str(item.get("id", "")) for item in items if str(item.get("id", ""))}
         for model in self._all_models():
             if str(model.id) not in wanted:
                 db.session.delete(model)
-        db.session.commit()
+        db.session.flush()
         for item in items:
             self.save(item)
 
@@ -118,6 +143,7 @@ class SqlVacancyStorage(SqlRepository):
         result["weights"] = model.weights.as_dict() if model.weights else result.get("weights", {})
         return result
 
+    @atomic_write
     def save(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         record = dict(payload)
         weights = dict(record.get("weights") or {})
@@ -128,7 +154,7 @@ class SqlVacancyStorage(SqlRepository):
                 model.weights = VacancyWeight(vacancy_id=model.id)
             for key in ("hard", "soft", "management", "education", "salary"):
                 setattr(model.weights, key, int(weights.get(key, getattr(model.weights, key))))
-            db.session.commit()
+            db.session.flush()
         return self.get_by_id(saved["id"])
 
 
@@ -198,6 +224,7 @@ class SqlTransferStorage(SqlRepository):
 class SqlScoreResultStorage:
     """Неизменяемая история запусков scoring для пары кандидат–вакансия."""
 
+    @atomic_write
     def save(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         record = dict(payload)
         model = ScoreResult(
@@ -206,7 +233,7 @@ class SqlScoreResultStorage:
             model_version=record.get("model_version"), created_at=record.get("created_at"), payload=record,
         )
         db.session.add(model)
-        db.session.commit()
+        db.session.flush()
         return {**record, "id": model.id}
 
     def list_by_candidate(self, candidate_id: str) -> List[Dict[str, Any]]:
@@ -245,6 +272,7 @@ class SqlChatConversationStorage(SqlRepository):
 
 
 class SqlChatMessageStorage:
+    @atomic_write
     def save(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         record = dict(payload)
         model = ChatMessage(
@@ -253,7 +281,7 @@ class SqlChatMessageStorage:
             model_version=record.get("model_version"), created_at=str(record["created_at"]), payload=record,
         )
         db.session.add(model)
-        db.session.commit()
+        db.session.flush()
         return {**record, "id": model.id}
 
     def get_by_id(self, message_id: int) -> Dict[str, Any] | None:
