@@ -11,6 +11,22 @@ from src.storage.sql_storage import SqlVacancyStorage, SqlCandidateStorage, SqlS
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+def sql_snapshot():
+    """Compare complete persisted state, including JSON and history, after failures."""
+    from sqlalchemy import select
+    return {table.name: [tuple(row) for row in db.session.execute(
+        select(table).order_by(*table.primary_key.columns)).all()]
+        for table in db.metadata.sorted_tables}
+
+
+def fail_after_write(monkeypatch, target, method):
+    original = getattr(target, method)
+    def fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise ValueError('injected failure after write')
+    monkeypatch.setattr(target, method, fail)
+
 @pytest.fixture
 def system(tmp_path, monkeypatch):
     test_app = Flask('system_scenarios', template_folder=str(ROOT / 'src/templates'), static_folder=str(ROOT / 'src/static'))
@@ -212,6 +228,114 @@ def test_transfer_routes_update_candidate_score_and_conversation(system,monkeypa
     assert SqlCandidateStorage().get_candidate('CV_VERA')['vacancy_id']=='VAC_TARGET'
     assert '85/100' in after['answer']
     assert after['context']['vacancy']['id']=='VAC_TARGET'
+
+
+@pytest.mark.parametrize('via_chat,checkpoint', [
+    (False, 'stage'), (False, 'audit'), (False, 'candidate'), (False, 'score'), (True, 'score'),
+    (True, 'conversation'), (True, 'confirmation'),
+])
+def test_failed_transfer_rolls_back_every_record_and_can_retry(system, monkeypatch, via_chat, checkpoint):
+    SqlVacancyStorage().save({'id':'VAC_TARGET','title':'Аналитик','status':'active'})
+    recommendation={'vacancy_id':'VAC_TARGET','total':85,'current_total':71,
+                    'model_probability':.9,'scores':{'hard':8.5}}
+    monkeypatch.setattr(routes.AlternativeVacancyService,'find_alternatives',
+                        lambda *args,**kwargs:{'alternatives':[recommendation]})
+    if via_chat:
+        suggested=ask(system,'перенеси Архипову на VAC_TARGET')
+        url='/api/chat/actions/confirm'
+        body={'confirmation_token':suggested['suggested_action']['confirmation_token']}
+    else:
+        url='/api/candidates/CV_VERA/vacancies'
+        body={'from_vacancy_id':'VAC_SYS','to_vacancy_id':'VAC_TARGET','mode':'transfer','hr_id':'HR_TEST'}
+    before=sql_snapshot()
+    targets={'stage':(routes.candidate_stage_event_storage,'save'),
+             'audit':(routes.transfer_storage,'save'),
+             'candidate':(routes.storage,'save_candidate'),
+             'score':(routes.score_result_storage,'save'),
+             'conversation':(routes.chat_conversation_storage,'save'),
+             'confirmation':(routes.ChatHistoryService,'complete_action')}
+    with monkeypatch.context() as failure:
+        fail_after_write(failure,*targets[checkpoint])
+        response=system.post(url,json=body)
+        assert response.status_code in {400,500},response.get_json()
+    assert sql_snapshot()==before
+    assert system.post(url,json=body).status_code==(200 if via_chat else 201)
+    assert routes.storage.get_candidate('CV_VERA')['vacancy_id']=='VAC_TARGET'
+    assert routes.candidate_vacancy_storage.find('CV_VERA','VAC_SYS')['status']=='transferred'
+    assert len(routes.transfer_storage.list_all())==1
+    if via_chat:
+        assert system.post(url,json=body).status_code==409
+
+
+def test_failed_stage_history_rolls_back_current_stage(system, monkeypatch):
+    before=sql_snapshot()
+    with monkeypatch.context() as failure:
+        fail_after_write(failure,routes.candidate_stage_event_storage,'save')
+        response=system.post('/api/candidates/CV_ANNA/stage',json={'vacancy_id':'VAC_SYS','stage':'offer'})
+        assert response.status_code==400
+    assert sql_snapshot()==before
+    assert system.post('/api/candidates/CV_ANNA/stage',json={'vacancy_id':'VAC_SYS','stage':'offer'}).status_code==200
+
+
+@pytest.mark.parametrize('operation',['create','update','delete'])
+def test_failed_interview_stage_sync_rolls_back_calendar(system,monkeypatch,operation):
+    item=schedule(system) if operation!='create' else None
+    url='/api/interviews'+('/'+item['id'] if item else '')
+    method={'create':system.post,'update':system.put,'delete':system.delete}[operation]
+    payload={'candidate_id':'CV_ANNA','candidate_name':'Тест','vacancy_id':'VAC_SYS',
+             'date':'2099-10-22','time':'16:00','duration':60,'format':'online'} if operation=='create' else {'status':'cancelled'}
+    before=sql_snapshot()
+    # Unhandled exceptions must also roll back, even when Flask creates the 500.
+    monkeypatch.setitem(system.application.config,'PROPAGATE_EXCEPTIONS',False)
+    with monkeypatch.context() as failure:
+        fail_after_write(failure,routes.candidate_stage_event_storage,'save')
+        assert method(url,json=payload).status_code in {400,500}
+    assert sql_snapshot()==before
+    assert method(url,json=payload).status_code==(201 if operation=='create' else 200)
+
+
+@pytest.mark.parametrize('endpoint',['/api/candidates/manual','/api/simulate'])
+@pytest.mark.parametrize('checkpoint',['score','stage'])
+def test_failed_scoring_history_leaves_no_partial_candidate(system,monkeypatch,endpoint,checkpoint):
+    body={'name':'Тест','position':'Разработчик','resume_text':'Python SQL, 5 лет опыта', 'vacancy_id':'VAC_SYS'}
+    before=sql_snapshot()
+    monkeypatch.setitem(system.application.config,'PROPAGATE_EXCEPTIONS',False)
+    with monkeypatch.context() as failure:
+        target=(routes.score_result_storage,'save') if checkpoint=='score' else (routes.candidate_stage_service,'register_scoring')
+        fail_after_write(failure,*target)
+        assert system.post(endpoint,json=body).status_code==500
+    assert sql_snapshot()==before
+
+
+def test_chat_history_failure_leaves_no_partial_exchange(system,monkeypatch):
+    before=sql_snapshot()
+    with monkeypatch.context() as failure:
+        fail_after_write(failure,routes.chat_message_storage,'save')
+        assert system.post('/api/chat',json={'message':'найди Агафонову'}).status_code==400
+    assert sql_snapshot()==before
+    assert ask(system,'найди Агафонову')['conversation_id']
+
+
+def test_operation_commits_once_and_commit_failure_rolls_back(system,monkeypatch):
+    session=db.session()
+    before=sql_snapshot()
+    def fail_commit():
+        raise RuntimeError('injected commit failure')
+    monkeypatch.setitem(system.application.config,'PROPAGATE_EXCEPTIONS',False)
+    with monkeypatch.context() as failure:
+        failure.setattr(session,'commit',fail_commit)
+        assert system.post('/api/candidates/CV_ANNA/stage',json={
+            'vacancy_id':'VAC_SYS','stage':'offer'}).status_code==500
+    assert sql_snapshot()==before
+    original=session.commit
+    commits=[]
+    def count_commit():
+        commits.append(True)
+        return original()
+    monkeypatch.setattr(session,'commit',count_commit)
+    assert system.post('/api/candidates/CV_ANNA/stage',json={
+        'vacancy_id':'VAC_SYS','stage':'offer'}).status_code==200
+    assert len(commits)==1
 
 
 

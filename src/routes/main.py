@@ -16,6 +16,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, red
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from src.services.app_time import local_now
+from src.services.transactions import transactional_request
 from src.chat import ChatService, SmartHRChatTools, build_chat_model
 from src.config import DEMO_RESUMES, FUNNEL_STAGES, MAX_CONTENT_LENGTH
 from src.core.rag_pipeline import RagPipeline
@@ -543,6 +544,7 @@ def chat_page():
 
 
 @main_bp.route("/api/chat", methods=["POST"])
+@transactional_request
 def chat_api():
     """Возвращает ответ модели, основанный на данных SmartHR и RAG-контексте."""
     payload = request.get_json(silent=True) or {}
@@ -606,6 +608,7 @@ def chat_api():
 
 
 @main_bp.route("/api/chat/actions/confirm", methods=["POST"])
+@transactional_request
 def confirm_chat_action():
     """Выполняет ранее предложенное действие только по подписанному подтверждению HR."""
     body = request.get_json(silent=True) or {}
@@ -1250,6 +1253,7 @@ def list_candidates():
 
 
 @main_bp.route("/api/candidates/manual", methods=["POST"])
+@transactional_request
 def create_candidate_manual():
     """Создаёт кандидата из ручного ввода и запускает скоринг."""
     body = request.get_json(silent=True) or {}
@@ -1351,6 +1355,7 @@ def funnel_analytics_api():
 
 
 @main_bp.route("/api/candidates/<candidate_id>/stage", methods=["POST"])
+@transactional_request
 def update_candidate_stage(candidate_id: str):
     """Фиксирует решение HR и переход рассмотрения на следующий этап."""
     body = request.get_json(silent=True) or {}
@@ -1388,6 +1393,7 @@ def _save_transfer_result(candidate_id, target_id, recommendation):
 
 
 @main_bp.route("/api/candidates/<candidate_id>/vacancies", methods=["POST"])
+@transactional_request
 def apply_candidate_to_vacancy(candidate_id: str):
     """Добавляет кандидата к альтернативной вакансии или переносит его."""
     body = request.get_json(silent=True) or {}
@@ -1448,6 +1454,7 @@ def _sync_interview_stage(record, hr_id="HR_SYSTEM"):
 
 
 @main_bp.route("/api/interviews", methods=["POST"])
+@transactional_request
 def create_interview():
     """Создаёт интервью."""
     body = request.get_json(silent=True) or {}
@@ -1462,6 +1469,7 @@ def create_interview():
 
 
 @main_bp.route("/api/interviews/<interview_id>", methods=["PUT"])
+@transactional_request
 def update_interview(interview_id: str):
     """Обновляет данные интервью."""
     body = request.get_json(silent=True) or {}
@@ -1479,6 +1487,7 @@ def update_interview(interview_id: str):
 
 
 @main_bp.route("/api/interviews/<interview_id>", methods=["DELETE"])
+@transactional_request
 def delete_interview(interview_id: str):
     """Удаляет интервью."""
     record = next((item for item in interview_service.list_all() if str(item.get("id")) == interview_id), None)
@@ -1575,6 +1584,7 @@ def create_feedback_decision():
         return jsonify({"error": f"Ошибка сохранения: {exc}"}), 500
 
 @main_bp.route("/api/simulate", methods=["POST"])
+@transactional_request
 def simulate():
     body = request.get_json(silent=True) or {}
     if not body:
