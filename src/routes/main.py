@@ -2,6 +2,7 @@
 """Маршруты приложения."""
 
 import json
+import os
 import random
 import re
 import uuid
@@ -72,7 +73,7 @@ candidate_vacancy_service = CandidateVacancyService(candidate_vacancy_storage, t
 funnel_service = FunnelService(candidate_vacancy_storage, candidate_stage_event_storage, storage)
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DOCS_DIR = ROOT_DIR / "docs" / "sample_docs"
-UPLOAD_DOCS_DIR = ROOT_DIR / "data" / "documents"
+UPLOAD_DOCS_DIR = Path(os.getenv("SMARTHR_DOCUMENTS", ROOT_DIR / "data" / "documents")).resolve()
 DOCUMENT_LOCK = RLock()
 VACANCY_CATEGORIES = ["IT", "Медицина", "Производство", "Финансы", "Строительство", "Образование", "Продажи", "Логистика"]
 
@@ -1277,6 +1278,13 @@ def parse_hh():
             return jsonify({"error": "hh.ru не ответил вовремя. Повторите попытку позже."}), 504
         current_app.logger.exception("HH resume import failed")
         return jsonify({"error": "Не удалось получить резюме с hh.ru. Проверьте доступность ссылки."}), 502
+
+
+@main_bp.route("/api/health", methods=["GET"])
+def health_check():
+    from src.services.health_service import readiness
+    payload, status = readiness()
+    return jsonify(payload), status
 
 
 @main_bp.route("/api/candidates", methods=["GET"])

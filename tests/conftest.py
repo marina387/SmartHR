@@ -29,8 +29,10 @@ def pytest_configure(config):
     run = config._smarthr_run
     environment = {
         "SMARTHR_DATABASE": str(run / "application.db"),
+        "SMARTHR_DOCUMENTS": str(run / "documents"),
         "CHAT_MODEL_PATH": str(run / "no-chat-artifact"),
         "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "RAG_BACKEND": "tfidf",
+        "SMARTHR_LOG_DIR": str(run / "logs"),
     }
     config._smarthr_environment = {key: os.environ.get(key) for key in environment}
     os.environ.update(environment)
@@ -71,6 +73,8 @@ def isolated_application(request):
     app.config.update(TESTING=True)
     with app.app_context():
         upgrade(directory=str(ROOT / "migrations"))
+    from src.services.diagnostics import configure_logging
+    configure_logging(app)
     original = (routes.UPLOAD_DOCS_DIR, routes.rag_pipeline, routes.DOCUMENTS)
     from src.core.rag_pipeline import RagPipeline
     routes.UPLOAD_DOCS_DIR = run / "documents"

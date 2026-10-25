@@ -13,6 +13,8 @@ database_path = Path(os.getenv("SMARTHR_DATABASE", Path(__file__).resolve().pare
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{database_path.as_posix()}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+from src.services.diagnostics import install_diagnostics
+install_diagnostics(app)
 db.init_app(app)
 migrate.init_app(app, db)
 
