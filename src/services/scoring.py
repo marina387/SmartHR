@@ -34,6 +34,8 @@ class CandidateScoringService:
                         vacancy: Dict[str, Any] | None = None,
                         candidate_profile: Dict[str, Any] | None = None) -> Dict[str, Any]:
         safe_weights = self._normalize_weights(weights)
+        # A caller may add filters, but cannot remove the vacancy's mandatory ones.
+        critical_requirements = self.effective_requirements(vacancy, critical_requirements)
         profile = candidate_profile or extract_candidate_profile(candidate_text)
         critical_failures = self.check_critical_filters(candidate_text, critical_requirements, profile)
         if critical_failures:
@@ -61,6 +63,19 @@ class CandidateScoringService:
             "missing_fields": profile.get("missing_fields", []),
             "used_weights": safe_weights,
         }
+
+    @staticmethod
+    def effective_requirements(vacancy, additional=None) -> List[str]:
+        result, seen = [], set()
+        for values in ((vacancy or {}).get("critical_requirements"), additional):
+            if isinstance(values, str):
+                values = values.splitlines()
+            for value in values or []:
+                text = str(value).strip()
+                if text and text.casefold() not in seen:
+                    result.append(text)
+                    seen.add(text.casefold())
+        return result
 
     def _model_vacancy(self, vacancy: Dict[str, Any], critical_requirements: List[str]) -> Dict[str, Any]:
         result = dict(vacancy)

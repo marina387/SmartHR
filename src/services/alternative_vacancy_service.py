@@ -12,6 +12,7 @@ from src.config import (
     ALTERNATIVE_MIN_IMPROVEMENT,
     ALTERNATIVE_MIN_PROBABILITY,
     ALTERNATIVE_MIN_SCORE,
+    FUNNEL_STAGES,
 )
 from src.services.profile_extraction import extract_candidate_profile
 from src.services.scoring import CandidateScoringService
@@ -27,7 +28,7 @@ STRONG_MATCH_PROBABILITY = 0.7
 SEMANTIC_MIN_SIMILARITY = 0.35
 SEMANTIC_MARGIN = 0.05
 # Активные статусы связи; всё остальное (rejected, archived) не блокирует перенос.
-ACTIVE_LINK_STATUSES = {"active", "in_progress", "offer", "активна", "в работе"}
+ACTIVE_LINK_STATUSES = {*FUNNEL_STAGES, "active", "in_progress", "активна", "в работе"}
 
 
 class AlternativeVacancyService:

@@ -1,6 +1,8 @@
 """Тесты нечёткого сравнения, рекомендаций и переноса кандидата."""
 
 from pathlib import Path
+import pytest
+from src.config import FUNNEL_STAGES
 
 from src.services.alternative_vacancy_service import AlternativeVacancyService
 from src.services.candidate_vacancy_service import CandidateVacancyService
@@ -29,7 +31,8 @@ def test_skill_matcher_supports_alias_and_fuzzy_match() -> None:
     assert {item["match_type"] for item in result["matches"]} <= {"alias", "fuzzy", "exact"}
 
 
-def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize('linked_stage',[None,*FUNNEL_STAGES,'rejected','withdrawn','archived'])
+def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch, linked_stage) -> None:
     candidates = FileCandidateStorage(tmp_path / "candidates.json")
     vacancies_store = VacancyStorage(tmp_path / "vacancies.json")
     relations = CandidateVacancyStorage(tmp_path / "relations.json")
@@ -43,8 +46,13 @@ def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch) -> N
         {"id": "VAC_003", "title": "Закрытая", "status": "closed", "weights": {"hard": 100}},
     ])
     service = AlternativeVacancyService(candidates, VacancyService(vacancies_store), FakeScoringService(), relations)
+    if linked_stage:
+        relations.save({'candidate_id':'CV_001','vacancy_id':'VAC_002','status':linked_stage})
     monkeypatch.setattr(service, "_semantic_sims", lambda resume, pool: {v["id"]: 0.9 for v in pool})
     result = service.find_alternatives("CV_001", "VAC_001")
+    if linked_stage in FUNNEL_STAGES:
+        assert result['alternatives']==[]
+        return
     assert [item["vacancy_id"] for item in result["alternatives"]] == ["VAC_002"]
     assert result["alternatives"][0]["score_improvement"] == 25
     assert not result["alternatives"][0]["missing_skills"]

@@ -43,6 +43,8 @@ def isolated_feature_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     transfer_storage = TransferStorage(tmp_path / "candidate_transfers.json")
     stage_event_storage = CandidateStageEventStorage(tmp_path / "candidate_stage_events.json")
     vacancy_service = VacancyService(vacancy_storage)
+    vacancy_service.create({"id": "VAC_001", "title": "Специалист", "status": "active"})
+    candidate_storage.save_candidate({"id": "CV_001", "name": "Иванов Алексей", "lifecycle_status": "active"})
 
     monkeypatch.setattr(main_routes, "storage", candidate_storage)
     monkeypatch.setattr(main_routes, "vacancy_storage", vacancy_storage)

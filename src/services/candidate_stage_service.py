@@ -21,6 +21,9 @@ class CandidateStageService:
             raise ValueError(f"Неизвестный этап: {to_stage}")
         current = self.relation_storage.find(candidate_id, vacancy_id)
         from_stage = str(current.get("status")) if current else None
+        if (from_stage in {*FUNNEL_TERMINAL_STATUSES, "hired"}
+                and to_stage in FUNNEL_STAGES and to_stage not in {from_stage, "in_review"}):
+            raise ValueError("Сначала явно верните кандидата в работу по вакансии (in_review)")
         now = datetime.now().isoformat(timespec="seconds")
         record = {
             **(current or {}), **(extra or {}),
@@ -38,8 +41,15 @@ class CandidateStageService:
         return saved
 
     def register_scoring(self, candidate_id: str, vacancy_id: str, result: Dict[str, Any], source: str = "scoring") -> Dict[str, Any]:
-        self.transition(candidate_id, vacancy_id, "new", source=source, reason="Кандидат добавлен")
-        target = "recommended" if int(result.get("total", 0)) >= 70 else "scored" if int(result.get("total", 0)) >= 40 else "rejected"
+        current = self.relation_storage.find(candidate_id, vacancy_id)
+        if not current:
+            self.transition(candidate_id, vacancy_id, "new", source=source, reason="Кандидат добавлен")
+        # Scoring updates numbers, not previously made HR decisions or interview state.
+        if current and current.get("status") not in {"new", "scored", "recommended"}:
+            return self.relation_storage.save({**current, "total": result.get("total"),
+                "model_probability": result.get("model_probability"),
+                "updated_at": datetime.now().isoformat(timespec="seconds")})
+        target = "rejected" if result.get("critical_failures") else "recommended" if int(result.get("total", 0)) >= 70 else "scored" if int(result.get("total", 0)) >= 40 else "rejected"
         return self.transition(
             candidate_id, vacancy_id, target, source=source, reason="Scoring завершён",
             extra={"total": result.get("total"), "model_probability": result.get("model_probability")},

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Dict
+from src.config import FUNNEL_TERMINAL_STATUSES
 
 from src.storage.candidate_vacancy_storage import CandidateVacancyStorage
 from src.storage.transfer_storage import TransferStorage
@@ -27,7 +28,7 @@ class CandidateVacancyService:
         if from_vacancy_id == to_vacancy_id:
             raise ValueError("Исходная и целевая вакансии должны отличаться")
         existing = self.storage.find(candidate_id, to_vacancy_id)
-        if existing and existing.get("status") not in {"rejected", "withdrawn", "transferred"}:
+        if existing and existing.get("status") not in FUNNEL_TERMINAL_STATUSES:
             raise ValueError("Кандидат уже связан с целевой вакансией")
 
         now = datetime.now().isoformat(timespec="seconds")

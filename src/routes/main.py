@@ -18,7 +18,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from src.services.app_time import local_now
 from src.services.transactions import transactional_request
 from src.chat import ChatService, SmartHRChatTools, build_chat_model
-from src.config import DEMO_RESUMES, FUNNEL_STAGES, MAX_CONTENT_LENGTH
+from src.config import DEMO_RESUMES, FUNNEL_STAGES, FUNNEL_TERMINAL_STATUSES, MAX_CONTENT_LENGTH
 from src.core.rag_pipeline import RagPipeline
 from src.core.loaders import load_hr_documents, load_document
 from src.services.feedback_service import FeedbackService
@@ -1453,12 +1453,33 @@ def _sync_interview_stage(record, hr_id="HR_SYSTEM"):
                                        reason="Обновление календаря интервью", source="interview")
 
 
+def _validate_interview_application(record):
+    """Do not create an active interview with no eligible candidate/application."""
+    if record.get("status", "scheduled") == "cancelled":
+        return
+    candidate_id, vacancy_id = str(record.get("candidate_id", "")), str(record.get("vacancy_id", ""))
+    candidate = storage.get_candidate(candidate_id)
+    if not candidate:
+        raise ValueError("Кандидат не найден")
+    if candidate.get("lifecycle_status", "active") != "active":
+        raise ValueError("Сначала восстановите кандидата из архива")
+    vacancy = vacancy_service.get_by_id(vacancy_id)
+    if not vacancy:
+        raise ValueError("Вакансия не найдена")
+    if str(vacancy.get("status", "active")).casefold() not in {"active", "активна"}:
+        raise ValueError("Нельзя назначить интервью по неактивной вакансии")
+    relation = candidate_vacancy_storage.find(candidate_id, vacancy_id)
+    if relation and relation.get("status") in {"offer", "hired", *FUNNEL_TERMINAL_STATUSES}:
+        raise ValueError("Текущий этап не допускает новое интервью. Сначала явно верните кандидата в работу по вакансии.")
+
+
 @main_bp.route("/api/interviews", methods=["POST"])
 @transactional_request
 def create_interview():
     """Создаёт интервью."""
     body = request.get_json(silent=True) or {}
     try:
+        _validate_interview_application(body)
         record = interview_service.create(body)
         _sync_interview_stage(record, str(body.get("hr_id") or "HR_SYSTEM"))
         return jsonify(record), 201
@@ -1474,6 +1495,13 @@ def update_interview(interview_id: str):
     """Обновляет данные интервью."""
     body = request.get_json(silent=True) or {}
     try:
+        current = next((item for item in interview_service.list_all() if str(item.get("id")) == interview_id), None)
+        if current:
+            proposed = {**current, **body}
+            schedule_changed = bool({"date", "time", "duration", "format"} & body.keys())
+            reactivating = body.get("status") == "scheduled" and current.get("status") != "scheduled"
+            if proposed.get("status") == "scheduled" and (schedule_changed or reactivating):
+                _validate_interview_application(proposed)
         updated = interview_service.update(interview_id, body)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

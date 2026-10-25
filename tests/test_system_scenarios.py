@@ -338,6 +338,104 @@ def test_operation_commits_once_and_commit_failure_rolls_back(system,monkeypatch
     assert len(commits)==1
 
 
+@pytest.mark.parametrize('endpoint',['/api/score','/api/candidates/manual','/api/simulate'])
+@pytest.mark.parametrize('additional',[None,[],['Python']])
+def test_vacancy_critical_filters_cannot_be_removed(system,monkeypatch,endpoint,additional):
+    vacancy=routes.vacancy_service.get_by_id('VAC_SYS')
+    routes.vacancy_storage.save({**vacancy,'critical_requirements':['Kubernetes']})
+    monkeypatch.setattr(routes.random,'choice',lambda items:{'name':'Тест','text':'Python SQL'})
+    body={'vacancy_id':'VAC_SYS','candidate_text':'Python SQL','resume_text':'Python SQL',
+          'name':'Тест','position':'Разработчик'}
+    if additional is not None:
+        body['critical_requirements']=additional
+    response=system.post(endpoint,json=body)
+    assert response.status_code==(200 if endpoint=='/api/score' else 201),response.get_json()
+    result=response.get_json()
+    assert result['total']==0
+    assert 'Kubernetes' in result['critical_failures']
+    if endpoint!='/api/score':
+        assert routes.candidate_vacancy_storage.find(result['id'],'VAC_SYS')['status']=='rejected'
+
+
+@pytest.mark.parametrize('stage',['rejected','rejected_all','withdrawn','transferred','archived','offer','hired'])
+def test_interview_requires_explicit_reopening_after_closed_stage(system,stage):
+    routes.candidate_stage_service.transition('CV_ANNA','VAC_SYS',stage,source='hr')
+    before=sql_snapshot()
+    body={'candidate_id':'CV_ANNA','candidate_name':'Тест','vacancy_id':'VAC_SYS',
+          'date':'2099-10-22','time':'16:00','duration':60,'format':'online'}
+    response=system.post('/api/interviews',json=body)
+    assert response.status_code==400
+    assert 'верните кандидата в работу' in response.get_json()['error']
+    assert sql_snapshot()==before
+    assert system.post('/api/candidates/CV_ANNA/stage',json={
+        'vacancy_id':'VAC_SYS','stage':'in_review'}).status_code==200
+    assert system.post('/api/interviews',json=body).status_code==201
+    assert routes.candidate_vacancy_storage.find('CV_ANNA','VAC_SYS')['status']=='interview'
+
+
+@pytest.mark.parametrize('inactive',['candidate','vacancy','missing_candidate','missing_vacancy'])
+def test_interview_rejects_inactive_or_missing_entities(system,inactive):
+    if inactive=='candidate':
+        candidate=routes.storage.get_candidate('CV_ANNA')
+        routes.storage.save_candidate({**candidate,'lifecycle_status':'archived'})
+    elif inactive=='vacancy':
+        vacancy=routes.vacancy_service.get_by_id('VAC_SYS')
+        routes.vacancy_storage.save({**vacancy,'status':'closed'})
+    before=sql_snapshot()
+    response=system.post('/api/interviews',json={
+        'candidate_id':'missing' if inactive=='missing_candidate' else 'CV_ANNA',
+        'candidate_name':'Тест','vacancy_id':'missing' if inactive=='missing_vacancy' else 'VAC_SYS',
+        'date':'2099-10-22','time':'16:00','duration':60,'format':'online'})
+    assert response.status_code==400
+    assert sql_snapshot()==before
+
+
+def test_cancelled_interview_cannot_be_reactivated_after_rejection(system):
+    item=schedule(system)
+    assert system.put('/api/interviews/'+item['id'],json={'status':'cancelled'}).status_code==200
+    routes.candidate_stage_service.transition('CV_ANNA','VAC_SYS','rejected',source='hr')
+    before=sql_snapshot()
+    assert system.put('/api/interviews/'+item['id'],json={'status':'scheduled'}).status_code==400
+    assert sql_snapshot()==before
+    # Historical edits are allowed and must not reopen a closed application.
+    assert system.put('/api/interviews/'+item['id'],json={'notes':'Причина отмены'}).status_code==200
+    assert routes.candidate_vacancy_storage.find('CV_ANNA','VAC_SYS')['status']=='rejected'
+
+
+@pytest.mark.parametrize('stage',['in_review','interview','interview_completed','offer','hired','rejected','withdrawn','transferred','archived'])
+def test_rescoring_keeps_hr_stage_and_history(system,stage):
+    routes.candidate_stage_service.transition('CV_ANNA','VAC_SYS',stage,source='hr')
+    before=routes.candidate_stage_event_storage.list_by_candidate('CV_ANNA')
+    record=routes.candidate_stage_service.register_scoring('CV_ANNA','VAC_SYS',{'total':90,'model_probability':.9})
+    assert record['status']==stage
+    assert record['total']==90
+    assert routes.candidate_stage_event_storage.list_by_candidate('CV_ANNA')==before
+
+
+def test_rescoring_does_not_add_fake_new_stage_and_respects_critical_failure(system):
+    routes.candidate_stage_service.transition('CV_ANNA','VAC_SYS','scored')
+    before=len(routes.candidate_stage_event_storage.list_by_candidate('CV_ANNA'))
+    record=routes.candidate_stage_service.register_scoring('CV_ANNA','VAC_SYS',{'total':90,'critical_failures':['Kubernetes']})
+    assert record['status']=='rejected'
+    events=routes.candidate_stage_event_storage.list_by_candidate('CV_ANNA')
+    assert len(events)==before+1
+    assert events[-1]['from_stage']=='scored' and events[-1]['to_stage']=='rejected'
+
+
+def test_closed_stage_cannot_be_bypassed_by_chat_or_calendar_edit(system):
+    item=schedule(system)
+    routes.candidate_stage_service.transition('CV_ANNA','VAC_SYS','rejected',source='hr')
+    action=ask(system,'Переведи Агафонову на этап интервью')
+    before=sql_snapshot()
+    response=system.post('/api/chat/actions/confirm',json={
+        'confirmation_token':action['suggested_action']['confirmation_token']})
+    assert response.status_code==400
+    assert sql_snapshot()==before
+    assert system.put('/api/interviews/'+item['id'],json={'time':'18:00'}).status_code==400
+    assert sql_snapshot()==before
+    assert system.put('/api/interviews/'+item['id'],json={'status':'cancelled'}).status_code==200
+
+
 
 def test_edit_interview_form_and_full_update(system):
     item=schedule(system)
