@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 from threading import RLock
+import time
 from markupsafe import escape
 from typing import Any, Dict, List
 
@@ -751,6 +752,18 @@ def documents_page():
     return render_template("documents.html", documents=documents, query=query, search_results=search_results, error=request.args.get("error"), uploaded=request.args.get("uploaded"), updated=request.args.get("updated"))
 
 
+def _remove_document_file(path):
+    """Windows scanners may briefly hold a just-written file during rollback."""
+    for attempt in range(5):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError as exc:
+            if getattr(exc, "winerror", None) not in {32, 33} or attempt == 4:
+                raise
+            time.sleep(0.05)
+
+
 def _save_document_file(file):
     if not file or not file.filename:
         raise ValueError("Выберите файл.")
@@ -777,8 +790,8 @@ def _save_document_file(file):
         target.with_suffix(".json").write_text(json.dumps({"name":name}, ensure_ascii=False), encoding="utf-8")
         return target
     except Exception:
-        target.unlink(missing_ok=True)
-        target.with_suffix(".json").unlink(missing_ok=True)
+        _remove_document_file(target)
+        _remove_document_file(target.with_suffix(".json"))
         raise
 
 
@@ -813,8 +826,8 @@ def upload_document():
         return redirect(url_for("main.documents_page", uploaded="1"))
     except Exception as exc:
         if target:
-            target.unlink(missing_ok=True)
-            target.with_suffix(".json").unlink(missing_ok=True)
+            _remove_document_file(target)
+            _remove_document_file(target.with_suffix(".json"))
         return redirect(url_for("main.documents_page", error=_document_error(exc)))
 
 
@@ -855,8 +868,8 @@ def replace_document(document_id):
         if isinstance(exc, HTTPException):
             raise
         if target:
-            target.unlink(missing_ok=True)
-            target.with_suffix(".json").unlink(missing_ok=True)
+            _remove_document_file(target)
+            _remove_document_file(target.with_suffix(".json"))
         return redirect(url_for("main.read_document", document_id=document_id, error=_document_error(exc)))
 
 

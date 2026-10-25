@@ -17,10 +17,16 @@ def test_feature_builder_uses_salary_in_rubles() -> None:
         "max_salary": 200000, "specialization": "IT",
         "required_education": "bachelor", "english_required": "B1",
     }
-    features = service.prepare_features(candidate, vacancy).iloc[0]
-    assert features["salary_ratio"] == 0.75
+    frame = service.prepare_features(candidate, vacancy)
+    features = frame.iloc[0]
+    assert list(frame.columns) == service.feature_names
+    assert features["expected_salary"] == 150000
+    assert features["max_salary"] == 200000
     assert features["skills_match"] == 1.0
-    assert features["exp_within_range"] == 1.0
+    assert features["experience_years"] == 5
+    assert features["min_experience"] == 3
+    assert features["max_experience"] == 7
+    assert features["cand_edu_idx"] == features["vac_edu_idx"] == 3
 
 
 def test_resume_profile_reports_missing_fields() -> None:

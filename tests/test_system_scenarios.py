@@ -638,11 +638,23 @@ def test_builtin_document_management_preserves_original_file(system):
 
 
 
-def test_document_index_failure_does_not_commit_changes(system,monkeypatch):
+@pytest.mark.parametrize('transient_lock',[False,True])
+def test_document_index_failure_does_not_commit_changes(system,monkeypatch,transient_lock):
     original=next(d for d in routes._library_documents() if d.id=='interview_guide')
     original_index=routes.rag_pipeline
     def fail(*args,**kwargs): raise RuntimeError('simulated indexing failure')
     monkeypatch.setattr(routes.RagPipeline,'build_index',fail)
+    if transient_lock:
+        unlink=Path.unlink
+        blocked=[]
+        def transient_unlink(path,*args,**kwargs):
+            if path.suffix=='.txt' and not blocked:
+                blocked.append(path)
+                error=PermissionError('temporary Windows file lock')
+                error.winerror=32
+                raise error
+            return unlink(path,*args,**kwargs)
+        monkeypatch.setattr(Path,'unlink',transient_unlink)
     for endpoint,payload in [('/rename',{'title':'Новое название'}),('/replace',{'file':(BytesIO('Новая версия.'.encode()),'version.txt')}),('/delete',{'confirm':'yes'})]:
         response=system.post('/documents/interview_guide'+endpoint,data=payload)
         assert 'error=' in response.location
