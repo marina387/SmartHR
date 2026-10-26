@@ -13,6 +13,31 @@ def scoring_service() -> CandidateScoringService:
     return CandidateScoringService()
 
 
+@pytest.mark.parametrize('text,state', [
+    ('Опыта управления командой нет.', 'denied'),
+    ('Не руководила командой.', 'denied'),
+    ('Без управленческого опыта.', 'denied'),
+    ('Управленческий опыт отсутствует.', 'denied'),
+    ('Работала в команде разработки.', 'unknown'),
+    ('Изучала управление проектами.', 'unknown'),
+    ('Руководила командой из 3 человек.', 'mentioned'),
+    ('Исполняла обязанности мастера участка.', 'mentioned'),
+    ('Не руководила отделом. Руководила командой проекта.', 'conflicting'),
+    ('No management experience, never a team lead.', 'denied'),
+])
+def test_management_negation_and_evidence(scoring_service, text, state):
+    from src.services.management_evidence import management_evidence
+    assert management_evidence(text) == state
+    for required in (False, True):
+        result = scoring_service.evaluate({'resume_text': text}, {'management_required': required},
+                                           {'probability': .5, 'features': {}})
+        assert result['scores']['management'] == (10 if state == 'mentioned' else 2 if required else 5)
+        if state == 'denied':
+            assert 'отсутствие' in result['comments']['management']
+        if state == 'conflicting':
+            assert 'противоречивые' in result['comments']['management']
+
+
 def test_score_candidate_rejects_critical_failures(scoring_service: CandidateScoringService) -> None:
     """Критические фильтры должны отклонять кандидата."""
     result = scoring_service.score_candidate(

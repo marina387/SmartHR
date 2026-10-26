@@ -9,6 +9,7 @@ from src.config import CRITERIA, CRITERIA_LABELS
 from src.matching_service import MatchingService
 from src.services.profile_extraction import extract_candidate_profile
 from src.services.skill_matching import SkillMatcher
+from src.services.management_evidence import management_evidence
 
 
 def get_status_decision(total: int) -> Tuple[str, str]:
@@ -112,9 +113,9 @@ class CandidateScoringService:
         resume_lower = str(profile.get("resume_text") or "").casefold()
         hard = round(prediction["probability"] * 10, 1)
 
-        management_markers = ["руковод", "управлен", "команд", "начальник", "lead", "manager"]
         management_required = bool(vacancy.get("management_required"))
-        management_found = any(marker in resume_lower for marker in management_markers)
+        management_state = management_evidence(resume_lower)
+        management_found = management_state == 'mentioned'
         management = 10.0 if management_found else (2.0 if management_required else 5.0)
 
         soft_requirements = MatchingService._items(vacancy.get("soft_skills") or vacancy.get("skills"))
@@ -140,8 +141,12 @@ class CandidateScoringService:
         scores = {"hard": hard, "management": management, "soft": soft, "education": education, "salary": salary}
         evidence = {
             "hard": f"ML-вероятность соответствия: {prediction['probability']:.1%}. Это прогноз для данной вакансии на основе распознанных полей, а не общая оценка квалификации",
-            "management": ("Алгоритм обнаружил слова, связанные с руководством, управлением или командой; длительность и масштаб управленческого опыта требуют уточнения"
-                           if management_found else "Управленческий опыт не подтверждён текстом резюме. "
+            "management": ("Найдена формулировка об опыте руководства; длительность и масштаб требуют уточнения"
+                           if management_found else
+                           ("В тексте есть противоречивые сведения об управленческом опыте; требуется уточнение. "
+                            if management_state == 'conflicting' else
+                            "В тексте указано отсутствие управленческого опыта. " if management_state == 'denied' else
+                            "Управленческий опыт не подтверждён текстом резюме. ")
                            + ("Применена оценка 2/10, поскольку вакансия требует управления" if management_required
                               else "Требование управления не задано; применена нейтральная оценка 5/10")),
             "soft": (f"Совпало формулировок soft skills в тексте: {len(matched_soft)} из {len(soft_requirements)}; это не проверка личных качеств на практике"
