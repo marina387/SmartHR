@@ -32,9 +32,29 @@ def test_parse_pdf_reads_text_from_stream() -> None:
     fake_page.extract_text.return_value = "Текст страницы"
     fake_pdf_reader.pages = [fake_page]
 
-    with patch("PyPDF2.PdfReader", return_value=fake_pdf_reader):
+    with patch("pypdf.PdfReader", return_value=fake_pdf_reader):
         stream = BytesIO(b"fake-pdf")
         assert parse_pdf(stream) == "Текст страницы"
+
+
+def test_pdf_readers_extract_real_pdf(tmp_path) -> None:
+    from pypdf import PdfWriter
+    from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
+    from src.core.loaders import load_document
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=300, height=300)
+    font = DictionaryObject({NameObject('/Type'): NameObject('/Font'), NameObject('/Subtype'): NameObject('/Type1'),
+                             NameObject('/BaseFont'): NameObject('/Helvetica')})
+    page[NameObject('/Resources')] = DictionaryObject({NameObject('/Font'): DictionaryObject({NameObject('/F1'): font})})
+    content = DecodedStreamObject()
+    content.set_data(b'BT /F1 12 Tf 20 250 Td (Python SQL resume) Tj ET')
+    page[NameObject('/Contents')] = content
+    path = tmp_path / 'resume.pdf'
+    writer.write(path)
+    with path.open('rb') as stream:
+        assert 'Python SQL resume' in parse_pdf(stream)
+    assert 'Python SQL resume' in load_document(path).text
 
 
 def test_parse_docx_reads_paragraphs() -> None:

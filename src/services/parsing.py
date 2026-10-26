@@ -43,10 +43,10 @@ def extract_requirements(text: str) -> List[str]:
 
 
 def parse_pdf(stream) -> str:
-    """Извлекает текст из PDF через PyPDF2."""
-    import PyPDF2
+    """Извлекает текст из PDF через pypdf."""
+    import pypdf
 
-    reader = PyPDF2.PdfReader(io.BytesIO(stream.read()))
+    reader = pypdf.PdfReader(io.BytesIO(stream.read()))
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 

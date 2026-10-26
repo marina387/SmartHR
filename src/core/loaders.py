@@ -21,7 +21,7 @@ class LoadedDocument:
 
 
 def _read_pdf(path: Path) -> str:
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
 
     reader = PdfReader(str(path))
     pages = []

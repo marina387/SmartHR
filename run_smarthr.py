@@ -68,7 +68,7 @@ def main():
         verify_backup(backup)
         print('Backup verification: OK')
         return 0
-    required = ["flask", "Flask-SQLAlchemy", "Flask-Migrate", "scikit-learn", "python-docx", "PyPDF2", "rapidfuzz"]
+    required = ["flask", "Flask-SQLAlchemy", "Flask-Migrate", "scikit-learn", "python-docx", "pypdf", "rapidfuzz"]
     model = Path(os.getenv('CHAT_MODEL_PATH', ROOT / 'models/chat_model_real'))
     if (model / "smarthr_model_metadata.json").exists():
         required += ["torch", "transformers", "peft", "accelerate"]
