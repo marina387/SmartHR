@@ -158,6 +158,8 @@ class AlternativeVacancyService:
                 "used_weights": score.get("used_weights", {}),
                 "scores": score.get("scores", {}),
                 "evidence": score.get("evidence", {}),
+                "comments": score.get("comments", {}), "summary": score.get("summary"),
+                "requirement_checks": score.get("requirement_checks", []), "score_status": score.get("score_status", "calculated"),
                 "matched_skills": skill_details["matches"],
                 "missing_skills": skill_details["missing"],
                 "reason": self._reason(score, skill_details, semantic),

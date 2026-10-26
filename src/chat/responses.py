@@ -12,7 +12,7 @@ def structured_answer(context, action=None):
             return "Выберите кандидата или укажите его фамилию."
         sections = []
         for detail in requested:
-            if detail == "score_explanation" and not context.get("explain_requested"):
+            if detail == "score_explanation" and not context.get("explain_requested") and not (context.get('score') or {}).get('critical_failures'):
                 total = (context.get("score") or {}).get("total")
                 sections.append(f"Оценка кандидата {candidate.get('name') or candidate.get('id')}: {total}/100." if total is not None else "Для кандидата нет сохранённой оценки по выбранной вакансии.")
             else:
@@ -20,11 +20,13 @@ def structured_answer(context, action=None):
         return "\n\n".join(sections)
     if scenario == "score_explanation" and candidate and (context.get("score") or {}).get("critical_failures"):
         score = context["score"]
-        failures = score["critical_failures"]
-        return (f"Оценка кандидата {candidate.get('name') or candidate.get('id')}: {score.get('total', 0)}/100.\n"
-                + "В сохранённой оценке не подтверждены обязательные требования:\n"
-                + "\n".join(f"• {failure}" for failure in failures)
-                + "\nИтог выставлен по критическим фильтрам; оценки остальных критериев не рассчитывались.")
+        from src.services.score_explanation import explain_result
+        explanation = explain_result(score)
+        answer = (f"Кандидат: {candidate.get('name') or candidate.get('id')}.\n" + explanation['summary']
+                  + '\n' + '\n'.join('• ' + check['explanation'] for check in explanation['requirement_checks'] if check['status']=='not_confirmed'))
+        if candidate.get('lifecycle_status')=='archived':
+            answer += '\nПричина архивирования: ' + (candidate.get('archive_reason') or 'не сохранена')
+        return answer
     if scenario in {"greeting", "document_search", "score_explanation"}:
         from src.chat.models import MockChatModel
         return MockChatModel().generate([], context)
@@ -60,6 +62,8 @@ def structured_answer(context, action=None):
             f"Опыт работы: {str(experience) + ' лет' if experience is not None else 'не указан'}.",
             f"Образование: {education or 'не указано'}.",
             f"Навыки: {', '.join(skills) if skills else 'не указаны'}.",
-            f"Оценка: {str(score['total']) + '/100' if score.get('total') is not None else 'нет сохранённой оценки'}.",
+            ("Расчёт оценки остановлен: не подтверждены обязательные требования — " + ', '.join(score['critical_failures']) + '.'
+             if score.get('critical_failures') else
+             f"Оценка: {str(score['total']) + '/100' if score.get('total') is not None else 'нет сохранённой оценки'}."),
         ])
     return None

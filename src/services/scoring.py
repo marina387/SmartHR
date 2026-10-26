@@ -38,13 +38,23 @@ class CandidateScoringService:
         critical_requirements = self.effective_requirements(vacancy, critical_requirements)
         profile = candidate_profile or extract_candidate_profile(candidate_text)
         critical_failures = self.check_critical_filters(candidate_text, critical_requirements, profile)
+        requirement_checks = [
+            {"requirement": requirement, "status": "not_confirmed" if requirement in critical_failures else "confirmed",
+             "explanation": (f"В резюме не найдено подтверждение требования «{requirement}». Это не доказывает отсутствия навыка; требуется уточнение."
+                             if requirement in critical_failures else
+                             f"Упоминание требования «{requirement}» найдено в тексте или списке навыков. Уровень владения и практический стаж эта проверка отдельно не подтверждает.")}
+            for requirement in critical_requirements
+        ]
         if critical_failures:
+            from src.services.score_explanation import BLOCKED_COMMENT
             return {
                 "status": "red", "decision": "Отклонен", "total": 0,
-                "scores": {}, "comments": {}, "critical_failures": critical_failures,
-                "message": "Кандидат не прошёл критические фильтры: " + ", ".join(critical_failures),
+                "scores": {}, "comments": {key: BLOCKED_COMMENT for key in self.criteria}, "critical_failures": critical_failures,
+                "score_status": "blocked_by_requirements", "requirement_checks": requirement_checks,
+                "summary": "Расчёт соответствия остановлен: не подтверждены обязательные требования вакансии. Остальные критерии и вероятность модели не рассчитывались.",
+                "message": "Не подтверждены обязательные требования: " + ", ".join(critical_failures),
                 "model_probability": None, "model_version": self.matching_service.model_path.stem,
-                "features": {}, "missing_fields": [], "used_weights": safe_weights,
+                "features": {}, "missing_fields": profile.get('missing_fields', []), "used_weights": safe_weights,
             }
 
         model_vacancy = self._model_vacancy(vacancy or {}, critical_requirements)
@@ -54,6 +64,8 @@ class CandidateScoringService:
         status, decision = get_status_decision(total)
         return {
             "status": status, "decision": decision, "total": total,
+            "score_status": "calculated", "requirement_checks": requirement_checks,
+            "summary": "Итог — сумма оценок критериев с учётом весов вакансии и округлением до целого.",
             "scores": evaluation["scores"], "comments": evaluation["comments"],
             "evidence": evaluation["evidence"], "critical_failures": [], "message": "",
             "model_probability": round(prediction["probability"], 6),
@@ -127,11 +139,23 @@ class CandidateScoringService:
         salary = self._salary_score(profile, vacancy, salary_ratio)
         scores = {"hard": hard, "management": management, "soft": soft, "education": education, "salary": salary}
         evidence = {
-            "hard": f"ML-вероятность соответствия: {prediction['probability']:.1%}",
-            "management": "Управленческий опыт найден" if management_found else "Управленческий опыт не подтверждён",
-            "soft": f"Совпало soft skills: {len(matched_soft)} из {len(soft_requirements)}" if soft_requirements else "Требования к soft skills не заданы",
-            "education": "Образование соответствует" if edu_match else "Образование не соответствует",
-            "salary": "Отношение ожиданий к бюджету: " + f"{salary_ratio:.2f}",
+            "hard": f"ML-вероятность соответствия: {prediction['probability']:.1%}. Это прогноз для данной вакансии на основе распознанных полей, а не общая оценка квалификации",
+            "management": ("Алгоритм обнаружил слова, связанные с руководством, управлением или командой; длительность и масштаб управленческого опыта требуют уточнения"
+                           if management_found else "Управленческий опыт не подтверждён текстом резюме. "
+                           + ("Применена оценка 2/10, поскольку вакансия требует управления" if management_required
+                              else "Требование управления не задано; применена нейтральная оценка 5/10")),
+            "soft": (f"Совпало формулировок soft skills в тексте: {len(matched_soft)} из {len(soft_requirements)}; это не проверка личных качеств на практике"
+                     if soft_requirements else "Требования к soft skills не заданы; применена нейтральная оценка 5/10"),
+            "education": ("Образование не указано или не распознано; применена нейтральная оценка 5/10"
+                          if "education" in profile.get('missing_fields', []) else
+                          f"Распознанный уровень образования: {profile.get('education')}; требуемый уровень: {vacancy.get('required_education')}. "
+                          + ("Уровень соответствует; соответствие специальности отдельно не подтверждается" if edu_match
+                             else "Распознанный уровень ниже требуемого")),
+            "salary": ("Зарплатные ожидания не указаны или не распознаны; применена нейтральная оценка 5/10"
+                       if profile.get('expected_salary') is None else
+                       "Бюджет вакансии не указан; сравнение не выполнялось, применена нейтральная оценка 5/10"
+                       if not vacancy.get('max_salary') else
+                       f"Ожидания: {profile['expected_salary']}; бюджет: {vacancy['max_salary']}. Отношение ожиданий к бюджету: {salary_ratio:.2f}"),
         }
         comments = {key: self.generate_comment(key, value, evidence[key]) for key, value in scores.items()}
         return {"scores": scores, "comments": comments, "evidence": evidence}
@@ -183,6 +207,8 @@ class CandidateScoringService:
         return result
 
     def generate_comment(self, criterion: str, score: float, evidence: str = "") -> str:
+        if 'нейтральн' in evidence or 'не указано' in evidence or 'не распознано' in evidence:
+            return f"По критерию «{self.criteria_labels[criterion]}»: {evidence}. Нехватка данных не означает отсутствия навыка."
         level = "Высокий уровень" if score >= 8 else "Средний уровень" if score >= 5 else "Низкий уровень"
         suffix = f" {evidence}." if evidence else ""
         return f"{level} по критерию «{self.criteria_labels[criterion]}».{suffix}"

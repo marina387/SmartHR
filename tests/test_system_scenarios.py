@@ -554,6 +554,57 @@ def test_partial_vacancy_update_validates_resulting_range(system):
     assert sql_snapshot()==before
 
 
+def test_blocked_score_has_saved_explanations_and_no_fake_criterion_zeros(system):
+    vacancy=routes.vacancy_service.get_by_id('VAC_SYS')
+    routes.vacancy_storage.save({**vacancy,'critical_requirements':['Python','Docker','SQL']})
+    response=system.post('/api/candidates/manual',json={'name':'Проверка объяснения','position':'Стажёр',
+        'resume_text':'Навыки: Python. Образование: высшее.','vacancy_id':'VAC_SYS'})
+    assert response.status_code==201,response.get_json()
+    candidate=response.get_json()
+    assert candidate['critical_failures']==['Docker','SQL']
+    assert candidate['score_status']=='blocked_by_requirements'
+    assert candidate['scores']=={}
+    assert all('Не оценивалось' in comment for comment in candidate['comments'].values())
+    saved=routes.score_result_storage.list_by_candidate(candidate['id'])[0]
+    assert saved['comments']==candidate['comments']
+    assert saved['requirement_checks']==candidate['requirement_checks']
+    assert saved['summary']==candidate['summary']
+    page=system.get('/candidate/'+candidate['id']).get_data(as_text=True)
+    assert 'Обоснование результата' in page and 'Docker — не подтверждено' in page and 'SQL — не подтверждено' in page
+    assert 'Не оценивалось' in page and 'Почему кандидат в архиве' in page
+    assert 'Комментарий будет добавлен после интервью' not in page
+    from bs4 import BeautifulSoup
+    assert not any(item.get_text(strip=True)=='0/10' for item in BeautifulSoup(page,'html.parser').find_all('span'))
+    assert 'Оценка 0/100' not in page
+    answer=ask(system,'объясни оценку '+candidate['id'])['answer']
+    import re
+    assert 'Docker' in answer and 'SQL' in answer and not re.search(r'(?<!\d)0/100',answer)
+
+
+def test_legacy_blocked_card_explains_saved_filters_without_recalculation(system,monkeypatch):
+    candidate=routes.storage.get_candidate('CV_ANNA')
+    routes.storage.save_candidate({**candidate,'total':0,'scores':{},'comments':{},
+                                  'critical_failures':['Docker'],'lifecycle_status':'archived',
+                                  'archive_reason':'Не найдено подходящих активных вакансий'})
+    before=sql_snapshot()
+    def fail(*args,**kwargs):
+        raise AssertionError('Viewing a historical score must not re-run inference')
+    monkeypatch.setattr(routes.scoring_service,'score_candidate',fail)
+    page=system.get('/candidate/CV_ANNA').get_data(as_text=True)
+    assert 'Docker — не подтверждено' in page and 'Не оценивалось' in page
+    assert '0/10' not in page and 'Оценка 0/100' not in page
+    assert sql_snapshot()==before
+
+
+def test_missing_old_score_is_not_displayed_as_measured_zero(system):
+    candidate=routes.storage.get_candidate('CV_ANNA')
+    routes.storage.save_candidate({**candidate,'scores':{},'comments':{}})
+    page=system.get('/candidate/CV_ANNA').get_data(as_text=True)
+    assert 'для критерия нет сохранённого результата' in page
+    from bs4 import BeautifulSoup
+    assert not any(item.get_text(strip=True)=='0/10' for item in BeautifulSoup(page,'html.parser').find_all('span'))
+
+
 
 def test_edit_interview_form_and_full_update(system):
     item=schedule(system)

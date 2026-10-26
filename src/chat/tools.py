@@ -79,7 +79,8 @@ class SmartHRChatTools:
             return []
         values = score.get("scores") or {}
         weights = score.get("used_weights") or {}
-        comments = score.get("comments") or {}
+        from src.services.score_explanation import explain_result
+        comments = {item['key']:item['comment'] for item in explain_result(score)['criteria_items']}
         evidence = score.get("evidence") or {}
         return [
             {

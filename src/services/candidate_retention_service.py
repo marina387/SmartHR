@@ -65,6 +65,7 @@ class CandidateRetentionService:
                 "total": int(result.get("total", 0)),
                 "model_probability": float(result.get("model_probability") or 0),
                 "critical_failures": result.get("critical_failures", []),
+                "score_status": result.get("score_status"), "summary": result.get("summary"),
             }
             row["qualified"] = (
                 not row["critical_failures"]
@@ -95,7 +96,11 @@ class CandidateRetentionService:
         candidate.update({
             "lifecycle_status": "archived",
             "archived_at": now.isoformat(),
-            "archive_reason": "Не найдено подходящих активных вакансий",
+            "archive_reason": (f"Не найдено подходящих активных вакансий. Проверено вакансий: {len(assessment['evaluations'])}. "
+                               f"Для автоматического соответствия нужны подтверждённые обязательные требования, оценка от {ALTERNATIVE_MIN_SCORE}/100 "
+                               f"и вероятность модели от {ALTERNATIVE_MIN_PROBABILITY:.0%}. Подробности по каждой вакансии приведены ниже."
+                               if assessment['evaluations'] else
+                               "Нет активных вакансий для сопоставления. Вывод о соответствии другим должностям не делался."),
             "archive_source": source,
             "delete_after": (now + timedelta(days=CANDIDATE_RETENTION_DAYS)).isoformat(),
             "retention_assessment": assessment,

@@ -94,8 +94,9 @@
                         </td>
                         <td>{{ candidate.position }}</td>
                         <td>
+                            {% if candidate.score_blocked %}<div class="small">Не подтверждены обязательные требования</div>{% elif not candidate.score_available %}<div class="small">Оценка не сохранена</div>{% else %}
                             <div class="fw-semibold">{{ candidate.score }}</div>
-                            <div class="small text-muted">/ 100</div>
+                            <div class="small text-muted">/ 100</div>{% endif %}
                         </td>
                         <td>
                             {% if candidate.lifecycle_status == 'archived' %}

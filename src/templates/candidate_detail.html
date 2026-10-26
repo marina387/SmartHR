@@ -15,7 +15,7 @@
                         <h2 class="fw-bold mb-0">{{ candidate.name }}</h2>
                         <span class="status-badge badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.icon }} {{ candidate.status_meta.label }}</span>
                     </div>
-                    <p class="text-muted mb-2">{{ candidate.position }} · Оценка {{ candidate.score }}/100</p>
+                    <p class="text-muted mb-2">{{ candidate.position }} · {% if candidate.score_blocked %}Расчёт остановлен обязательным фильтром{% elif not candidate.score_available %}Оценка не сохранена{% else %}Оценка {{ candidate.score }}/100{% endif %}</p>
                     <div class="d-flex flex-wrap gap-3 small text-muted">
                         <span><i class="fa-solid fa-briefcase me-2"></i>{{ candidate.vacancy_id or 'VAC_001' }} · {{ candidate.vacancy_title or 'Не указана' }}</span>
                         <span><i class="fa-solid fa-envelope me-2"></i>{{ candidate.email }}</span>
@@ -54,6 +54,33 @@
         </div>
     </div>
 
+    <div class="col-12">
+        <section class="card border-0 shadow-sm p-4" aria-label="Обоснование результата">
+            <h3 class="h5">Обоснование результата</h3>
+            <p>{{ candidate.scoring_explanation.summary }}</p>
+            {% if candidate.scoring_explanation.requirement_checks %}
+            <h4 class="h6">Обязательные требования вакансии</h4>
+            <ul class="mb-0">
+                {% for check in candidate.scoring_explanation.requirement_checks %}
+                <li class="mb-2"><strong>{{ check.requirement }} — {{ 'не подтверждено' if check.status == 'not_confirmed' else 'упоминание найдено' }}</strong><br>{{ check.explanation }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% if candidate.lifecycle_status == 'archived' %}
+            <div class="alert alert-secondary mt-3 mb-0">
+                <h4 class="h6">Почему кандидат в архиве</h4>
+                <p class="mb-2">{{ archive_explanation.reason }}</p>
+                <p class="small">Это результат сопоставления с доступными вакансиями, а не вывод о пригодности к любым должностям.</p>
+                {% if archive_explanation.evaluations %}
+                <details><summary>Результаты сопоставления с вакансиями</summary>
+                    <ul>{% for evaluation in archive_explanation.evaluations %}<li><strong>{{ evaluation.vacancy }}</strong>: {{ evaluation.reason }}</li>{% endfor %}</ul>
+                </details>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+    </div>
+
     <div class="col-lg-8">
         <div class="card shadow-sm border-0">
             <div class="card-body">
@@ -62,11 +89,14 @@
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                         <span class="fw-medium">{{ item.label }}</span>
-                        <span class="text-muted">{{ item.score }}/10</span>
+                        <span class="text-muted">{% if item.score is not none %}{{ item.score }}/10{% else %}Не оценивалось{% endif %}</span>
                     </div>
+                    {% if item.score is not none %}
                     <div class="progress" role="progressbar" aria-valuenow="{{ item.score * 10 }}" aria-valuemin="0" aria-valuemax="100">
                         <div class="progress-bar bg-primary" style="width: {{ item.score * 10 }}%"></div>
                     </div>
+                    {% if item.contribution is not none %}<div class="small text-muted">Вес: {{ item.weight }}; вклад в итог: {{ item.contribution }} балла.</div>{% endif %}
+                    {% endif %}
                     <div class="small text-muted mt-1">{{ item.comment }}</div>
                 </div>
                 {% endfor %}
@@ -190,13 +220,13 @@
     <div class="col-12">
         <div class="card shadow-sm border-0">
             <div class="card-body">
-                <h4 class="fw-semibold mb-3">Комментарии HR</h4>
+                <h4 class="fw-semibold mb-3">Комментарии к автоматической оценке</h4>
                 <div class="row g-3">
-                    {% for key, comment in candidate.comments.items() %}
+                    {% for item in criteria_items %}
                     <div class="col-md-6">
                         <div class="comment-box p-3 rounded-4 border">
-                            <div class="fw-semibold mb-2">{{ scoring_service.criteria_labels.get(key, key) }}</div>
-                            <p class="mb-0 text-muted">{{ comment }}</p>
+                            <div class="fw-semibold mb-2">{{ item.label }}</div>
+                            <p class="mb-0 text-muted">{{ item.comment }}</p>
                         </div>
                     </div>
                     {% endfor %}

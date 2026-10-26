@@ -32,6 +32,26 @@ def test_check_critical_filters_handles_empty_requirements(scoring_service: Cand
     assert scoring_service.check_critical_filters("Python", []) == []
 
 
+def test_blocked_score_explains_each_requirement_without_calling_model(scoring_service,monkeypatch):
+    def fail(*args,**kwargs):
+        raise AssertionError('Mandatory filter must not invent a model prediction')
+    monkeypatch.setattr(scoring_service.matching_service,'predict',fail)
+    result=scoring_service.score_candidate('Навыки: Python', ['Python','Docker'], {})
+    assert result['model_probability'] is None and result['scores']=={}
+    assert result['requirement_checks'][0]['status']=='confirmed'
+    assert result['requirement_checks'][1]['status']=='not_confirmed'
+    assert 'не доказывает отсутствия' in result['requirement_checks'][1]['explanation']
+    assert set(result['comments'])==set(scoring_service.criteria)
+
+
+def test_missing_salary_and_education_are_explained_as_missing_data(scoring_service):
+    result=scoring_service.score_candidate('Навыки: Python',[],{},vacancy={'required_skills':['Python']})
+    assert 'не указаны или не распознаны' in result['comments']['salary']
+    assert 'нейтральная' in result['comments']['salary']
+    assert 'не указано или не распознано' in result['comments']['education']
+    assert 'Образование соответствует' not in result['evidence']['education']
+
+
 def test_calculate_total_uses_weights_and_clamps_values(scoring_service: CandidateScoringService) -> None:
     """Итоговый балл должен учитывать веса и попадать в диапазон 0..100."""
     scores: Dict[str, float] = {"hard": 10, "management": 10, "soft": 10, "education": 10, "salary": 10}

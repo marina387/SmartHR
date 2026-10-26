@@ -110,7 +110,7 @@
                                 </div>
                                 <div>
                                     <div class="fw-semibold">{{ candidate.name }}</div>
-                                    <div class="small text-muted">{{ candidate.position }} · {{ candidate.score }}%</div>
+                                    <div class="small text-muted">{{ candidate.position }} · {% if candidate.score_blocked %}Обязательные требования не подтверждены{% elif not candidate.score_available %}Оценка не сохранена{% else %}{{ candidate.score }}%{% endif %}</div>
                                 </div>
                             </div>
                             <span class="badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.label }}</span>

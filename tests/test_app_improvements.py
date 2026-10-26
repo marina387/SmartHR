@@ -191,11 +191,13 @@ def test_history_restores_feedback_and_actions():
     assert restored['sources'][0]['source'] == 'policy.txt'
 
 
-def test_explain_zero_from_critical_filters():
+def test_explain_blocked_score_from_mandatory_filters():
     from src.chat.responses import structured_answer
     answer = structured_answer({'scenario':'score_explanation', 'candidate':{'name':'Анна'}, 'score':{'total':0, 'critical_failures':['Сертификат не подтверждён']}})
     assert 'Сертификат не подтверждён' in answer
-    assert 'критическим фильтрам' in answer
+    assert 'не подтверждены обязательные требования' in answer
+    assert 'не рассчитывались' in answer
+    assert '0/100' not in answer
 
 
 @pytest.mark.parametrize('query', ['дата интервью Архиповой', 'во сколько собеседование Архиповой', 'покажи дату интервью Архиповой'])

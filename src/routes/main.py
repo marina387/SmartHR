@@ -230,6 +230,8 @@ def _candidate_view_model(candidate: Dict[str, Any]) -> Dict[str, Any]:
     status = str(candidate.get("status", "yellow"))
     meta = _status_meta(status)
     total = candidate.get("total", 0)
+    from src.services.score_explanation import explain_result
+    explanation = explain_result(candidate)
     return {
         **candidate,
         "status_meta": meta,
@@ -241,6 +243,8 @@ def _candidate_view_model(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "experience": candidate.get("experience") or ["3+ года опыта", "Опыт взаимодействия со стейкхолдерами"],
         "comments": candidate.get("comments") or {},
         "scores": candidate.get("scores") or {},
+        "score_blocked": explanation['blocked'], "scoring_explanation": explanation,
+        "score_available": candidate.get('total') is not None,
     }
 
 
@@ -325,6 +329,8 @@ def _candidate_for_storage(candidate: Dict[str, Any], score_result: Dict[str, An
         "features": score_result.get("features", {}),
         "evidence": score_result.get("evidence", {}),
         "missing_fields": score_result.get("missing_fields", []),
+        "score_status": score_result.get("score_status"), "summary": score_result.get("summary"),
+        "requirement_checks": score_result.get("requirement_checks", []),
         "used_weights": score_result.get("used_weights", {}),
         "timestamp": local_now().strftime("%Y-%m-%d %H:%M"),
         "position": candidate.get("position") or "Специалист",
@@ -344,6 +350,9 @@ def _save_score_history(candidate_id: str, vacancy_id: str, result: Dict[str, An
         "model_version": result.get("model_version"), "scores": result.get("scores", {}),
         "used_weights": result.get("used_weights", {}), "features": result.get("features", {}),
         "evidence": result.get("evidence", {}), "critical_failures": result.get("critical_failures", []),
+        "comments": result.get("comments", {}), "score_status": result.get("score_status"),
+        "summary": result.get("summary"), "requirement_checks": result.get("requirement_checks", []),
+        "missing_fields": result.get("missing_fields", []),
         "source": source, "created_at": local_now().isoformat(timespec="seconds"),
     })
 
@@ -476,17 +485,8 @@ def candidate_detail(candidate_id: str):
     candidate_relation = candidate_vacancy_storage.find(str(candidate.get("id", candidate_id)), vacancy_id)
     current_stage = str(candidate_relation.get("status", "in_review")) if candidate_relation else "in_review"
 
-    criteria_items = []
-    for criterion in scoring_service.criteria:
-        score = candidate.get("scores", {}).get(criterion, 0)
-        criteria_items.append(
-            {
-                "key": criterion,
-                "label": scoring_service.criteria_labels.get(criterion, criterion),
-                "score": score,
-                "comment": candidate.get("comments", {}).get(criterion, "Комментарий будет добавлен после интервью"),
-            }
-        )
+    criteria_items = candidate['scoring_explanation']['criteria_items']
+    from src.services.score_explanation import archive_explanation
     interviews = interview_service.list_by_candidate(str(candidate.get("id", candidate_id)))
     feedback_items = feedback_service.list_by_candidate(str(candidate.get("id", candidate_id)))
     return render_template(
@@ -500,6 +500,7 @@ def candidate_detail(candidate_id: str):
         vacancy=vacancy,
         current_stage=current_stage,
         page_script="candidate_detail.js",
+        archive_explanation=archive_explanation(candidate),
     )
 
 
@@ -1433,6 +1434,10 @@ def _save_transfer_result(candidate_id, target_id, recommendation):
         "model_version": recommendation.get("model_version"),
         "used_weights": recommendation.get("used_weights", {}),
         "evidence": recommendation.get("evidence", {}),
+        "comments": recommendation.get("comments", {}),
+        "critical_failures": recommendation.get("critical_failures", []),
+        "score_status": recommendation.get("score_status", "calculated"),
+        "summary": recommendation.get("summary"), "requirement_checks": recommendation.get("requirement_checks", []),
     })
     storage.save_candidate(candidate)
     _save_score_history(candidate_id, target_id, recommendation, "transfer")
@@ -1709,6 +1714,8 @@ def simulate():
         "phone": "+7 (999) 000-00-00",
         "vacancy_id": vacancy_id or "VAC_001",
         "resume_text": demo["text"],
+        "score_status": result.get("score_status"), "summary": result.get("summary"),
+        "requirement_checks": result.get("requirement_checks", []), "missing_fields": result.get("missing_fields", []),
         "model_probability": result.get("model_probability"),
         "model_version": result.get("model_version"),
         "used_weights": result.get("used_weights", {}),
