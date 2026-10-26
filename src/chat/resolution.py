@@ -9,7 +9,7 @@ def resolve_candidate(message, candidates):
     for candidate in candidates:
         if str(candidate.get("id", "")).casefold() in re.findall(r"[а-яёa-z0-9_]+", message.casefold()):
             return candidate
-    words = [word for word in re.findall(r"[а-яёa-z0-9_]+", message.casefold()) if word not in STOP_WORDS and len(word) >= 4]
+    words = [word for word in re.findall(r"[а-яёa-z0-9_]+", message.casefold()) if word not in STOP_WORDS and len(word) >= 2]
     if not words:
         return None
     ranked = []
@@ -17,7 +17,9 @@ def resolve_candidate(message, candidates):
         parts = re.findall(r"[а-яёa-z]+", str(candidate.get("name", "")).casefold())
         if str(candidate.get("id", "")).casefold() in words:
             return candidate
-        scores = [max((difflib.SequenceMatcher(None, word, part).ratio() for part in parts), default=0) for word in words]
+        # Short surnames are valid, but fuzzy matching them produces false positives.
+        scores = [max((1.0 if word == part else difflib.SequenceMatcher(None, word, part).ratio()
+                       if min(len(word), len(part)) >= 4 else 0.0 for part in parts), default=0) for word in words]
         best = max(scores, default=0)
         if best >= .73:
             ranked.append((best + sum(score >= .8 for score in scores) * .10, candidate))

@@ -26,6 +26,16 @@ def test_intents(message, scenario):
     assert ChatService._scenario(message) == scenario
 
 
+def test_short_candidate_surnames():
+    candidates = [{'id': 'C1', 'name': 'Кип Анастасия Фёдоровна'}, {'id': 'C2', 'name': 'Ли Анна'}]
+    assert resolve_candidate('объясни оценку Кип', candidates)['id'] == 'C1'
+    assert resolve_candidate('покажи Ли', candidates)['id'] == 'C2'
+    with pytest.raises(ValueError):
+        resolve_candidate('объясни оценку Кит', candidates)
+    with pytest.raises(ValueError, match='несколько'):
+        resolve_candidate('найди Кип', candidates + [{'id': 'C3', 'name': 'Кип Мария'}])
+
+
 def test_candidate_resolution_switch_missing_and_ambiguous():
     candidates = [{"id": "C1", "name": "Агафонова Анна"}, {"id": "C2", "name": "Бахрамова Вера"}]
     assert resolve_candidate("объясни оценку Агафановой", candidates)["id"] == "C1"

@@ -200,8 +200,13 @@ document.addEventListener('DOMContentLoaded', () => {
         candidateId = context.candidate?.id || '';
         vacancyId = context.vacancy?.id || '';
         document.getElementById('currentCandidateName').textContent = context.candidate?.name || 'Кандидат не выбран';
-        document.getElementById('currentCandidatePosition').textContent = context.candidate?.position || '';
-        document.getElementById('currentVacancyTitle').textContent = context.vacancy?.title || '';
+        const position = (context.candidate?.position || '').trim();
+        const vacancyTitle = (context.vacancy?.title || '').trim();
+        const normalizeTitle = value => value.replace(/\s+/g, ' ').toLocaleLowerCase('ru');
+        document.getElementById('currentCandidatePosition').textContent = position;
+        const vacancyElement = document.getElementById('currentVacancyTitle');
+        vacancyElement.textContent = vacancyTitle;
+        vacancyElement.hidden = !vacancyTitle || normalizeTitle(position) === normalizeTitle(vacancyTitle);
         document.getElementById('compactChatContext').textContent = context.candidate?.name || 'Кандидат не выбран';
     }
 
