@@ -237,8 +237,8 @@ def _candidate_view_model(candidate: Dict[str, Any]) -> Dict[str, Any]:
         "status_meta": meta,
         "score": int(total) if isinstance(total, int) else int(total or 0),
         "position": candidate.get("position") or "Специалист",
-        "email": candidate.get("email") or "hr@company.ru",
-        "phone": candidate.get("phone") or "+7 (999) 111-22-33",
+        "email": candidate.get("email") or "",
+        "phone": candidate.get("phone") or "",
         "skills": candidate.get("skills") or ["Аналитика", "Коммуникация"],
         "experience": candidate.get("experience") or ["3+ года опыта", "Опыт взаимодействия со стейкхолдерами"],
         "comments": candidate.get("comments") or {},
@@ -1395,6 +1395,60 @@ def funnel_analytics_api():
         return jsonify(result)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+@main_bp.route("/api/candidates/<candidate_id>", methods=["PATCH"])
+@transactional_request
+def edit_candidate(candidate_id: str):
+    body = request.get_json(silent=True) or {}
+    allowed = {"name": 200, "email": 254, "phone": 50, "hr_notes": 10000, "resume_text": 200000}
+    if not body or set(body) - (allowed.keys() | {"rescore"}):
+        return jsonify(error="Допустимы только имя, почта, телефон и заметки HR"), 400
+    if "rescore" in body and not isinstance(body["rescore"], bool):
+        return jsonify(error="rescore должно быть true или false"), 400
+    changes = {}
+    for key, limit in allowed.items():
+        if key not in body:
+            continue
+        if not isinstance(body[key], str) or len(body[key].strip()) > limit:
+            return jsonify(error=f"Поле {key}: требуется строка длиной до {limit} символов"), 400
+        changes[key] = body[key].strip()
+    if "name" in changes and not changes["name"]:
+        return jsonify(error="Укажите имя кандидата"), 400
+    if changes.get("email") and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", changes["email"]):
+        return jsonify(error="Укажите корректную почту"), 400
+    if changes.get("phone") and (not re.fullmatch(r"[+\d\s().-]+", changes["phone"]) or not 7 <= len(re.sub(r"\D", "", changes["phone"])) <= 15):
+        return jsonify(error="Укажите корректный телефон (от 7 до 15 цифр)"), 400
+    candidate = storage.get_candidate(candidate_id)
+    if not candidate:
+        return jsonify(error="Кандидат не найден"), 404
+    if "resume_text" in changes and not changes["resume_text"]:
+        return jsonify(error="Текст резюме не может быть пустым"), 400
+    if "resume_text" in changes and changes["resume_text"] != candidate.get("resume_text", "") and not body.get("rescore"):
+        return jsonify(error="Изменённое резюме необходимо сохранить с повторной оценкой"), 400
+    if body.get("rescore"):
+        vacancy_id = candidate.get("vacancy_id")
+        vacancy = vacancy_service.get_by_id(vacancy_id) if vacancy_id else None
+        if not vacancy:
+            return jsonify(error="Текущая вакансия не найдена"), 400
+        text = changes.get("resume_text", candidate.get("resume_text", "")).strip()
+        if not text:
+            return jsonify(error="Текст резюме пустой"), 400
+        result = scoring_service.score_candidate(text, [], vacancy_service.weights_for_vacancy(vacancy_id), vacancy=vacancy)
+        result_keys = ("total", "status", "decision", "scores", "comments", "critical_failures", "model_probability",
+                       "model_version", "features", "evidence", "missing_fields", "score_status", "summary",
+                       "requirement_checks", "used_weights")
+        revisions = list(candidate.get("resume_revisions") or [])
+        revisions.append({"saved_at": local_now().isoformat(timespec="seconds"), "vacancy_id": vacancy_id,
+                          "resume_text": candidate.get("resume_text", ""),
+                          "result": {key: candidate.get(key) for key in result_keys}})
+        candidate["resume_revisions"] = revisions
+        candidate.update({key: result.get(key) for key in result_keys})
+        candidate["score"] = result["total"]
+        _save_score_history(candidate_id, vacancy_id, result, "resume_edit")
+    candidate.update(changes)
+    storage.save_candidate(candidate)
+    return jsonify({"id": candidate_id, **{key: candidate.get(key, "") for key in allowed}})
 
 
 @main_bp.route("/api/candidates/<candidate_id>/stage", methods=["POST"])

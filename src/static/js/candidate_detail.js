@@ -1,3 +1,28 @@
+document.addEventListener("DOMContentLoaded", () => {
+    const form = document.getElementById("editCandidateForm");
+    if (!form) return;
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('[type="submit"]');
+        const error = document.getElementById("editCandidateError");
+        button.disabled = true;
+        error.hidden = true;
+        try {
+            const response = await fetch("/api/candidates/" + encodeURIComponent(form.dataset.candidateId), {
+                method: "PATCH", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({...Object.fromEntries(new FormData(form)), rescore: true}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Не удалось сохранить данные");
+            window.location.reload();
+        } catch (err) {
+            error.textContent = err.message || "Ошибка соединения. Повторите сохранение";
+            error.hidden = false;
+            button.disabled = false;
+        }
+    });
+});
+
 function detailShowToast(message, type) {
     const toast = document.createElement("div");
     toast.className = "toast " + (type || "green");
