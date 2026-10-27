@@ -125,6 +125,23 @@ def test_password_change_revokes_other_sessions(accounts):
     assert second.get('/api/candidates').status_code==401
 
 
+def test_cyrillic_login_creation_casefold_and_validation(accounts):
+    c=client();sign_in(c,'auth_admin')
+    with c.session_transaction() as s: csrf=s['csrf']
+    body={'csrf_token':csrf,'login':'Ёлкина387','name':'Ёлкина Анна','password':'correct-password-123','role':'hr'}
+    assert c.post('/admin/users',data=body).status_code==302
+    assert c.post('/admin/users',data={**body,'login':'ЁЛКИНА387'}).status_code==200
+    with app.app_context():
+        users=db.session.scalars(db.select(User).where(User.login=='ёлкина387')).all()
+        assert len(users)==1
+    other=client()
+    assert sign_in(other,'ЁЛКИНА387').status_code==302
+    assert other.get('/api/candidates').status_code==200
+    for login in ('иван ова','ки','иван@company.ru'):
+        response=c.post('/admin/users',data={**body,'login':login})
+        assert response.status_code==200 and 'без пробелов' in response.get_data(as_text=True)
+
+
 def test_audit_and_business_changes_commit_together(accounts,monkeypatch):
     from src.models import VacancyTemplate
     c=client();sign_in(c,'auth_hr')

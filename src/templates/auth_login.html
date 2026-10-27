@@ -10,6 +10,7 @@
         {% if setup %}<label for="authName" class="form-label">Фамилия и имя</label><input id="authName" name="name" class="form-control mb-3" required maxlength="200" autocomplete="name">{% endif %}
         <label for="authLogin" class="form-label">Логин</label>
         <input id="authLogin" name="login" class="form-control mb-3" required minlength="3" maxlength="120" autocomplete="username" autocapitalize="none">
+        {% if setup %}<p class="small text-muted">Русские и латинские буквы, цифры, _ . -; без пробелов. Регистр букв не важен.</p>{% endif %}
         <label for="authPassword" class="form-label">Пароль</label>
         <input id="authPassword" type="password" name="password" class="form-control mb-3" required {% if setup %}minlength="12"{% endif %} maxlength="256" autocomplete="{{ 'new-password' if setup else 'current-password' }}">
         {% if setup %}<p class="small text-muted">Не менее 12 символов. Пароль хранится в виде защищённого хеша.</p>{% endif %}

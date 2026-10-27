@@ -66,8 +66,8 @@ def user_from_form():
     name = str(request.form.get('name','')).strip()
     password = request.form.get('password','')
     role = request.form.get('role','hr')
-    if not re.fullmatch(r'[a-z0-9_.-]{3,120}', login) or not name or len(name)>200:
-        raise ValueError('Логин: 3–120 латинских букв, цифр или символов _ . -; укажите имя сотрудника')
+    if not re.fullmatch(r'[a-zа-яё0-9_.-]{3,120}', login) or not name or len(name)>200:
+        raise ValueError('Логин: 3–120 русских или латинских букв, цифр или символов _ . - без пробелов; укажите имя сотрудника')
     if not 12 <= len(password) <= 256:
         raise ValueError('Пароль должен содержать от 12 до 256 символов')
     if role not in {'hr','admin'}:
