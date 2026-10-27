@@ -28,6 +28,32 @@ body {
     color: #fff !important;
 }
 
+.app-navbar { padding: 12px 0; box-shadow: 0 3px 16px #312e8120; }
+.app-navbar-inner { gap: 14px; padding: 0 24px; }
+.app-navbar .navbar-brand { margin: 0; font-size: 18px; letter-spacing: -.35px; white-space: nowrap; }
+.app-navbar .navbar-collapse { justify-content: center; min-width: 0; }
+.app-navbar .navbar-nav { gap: 2px; }
+.app-navbar .nav-link { display: flex; align-items: center; gap: 7px; padding: 10px 9px !important; border-radius: 9px; white-space: nowrap; font-size: 13px; color: #eeebff; transition: background .15s, color .15s; }
+.app-navbar .nav-link i { margin: 0 !important; font-size: 13px; opacity: .85; }
+.app-navbar .nav-link:hover, .app-navbar .nav-link:focus-visible { background: #ffffff14; color: #fff; }
+.app-navbar .nav-link.active { background: #ffffff20; }
+.app-account-menu { flex-shrink: 0; }
+.app-account-button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid #ffffff45; border-radius: 12px; background: #ffffff18; color: #fff; }
+.app-account-button:hover, .app-account-button[aria-expanded="true"] { background: #ffffff30; }
+.app-account-button:focus-visible { outline: 3px solid #c7d2fe; outline-offset: 3px; }
+.app-account-dropdown { min-width: 220px; margin-top: 12px !important; padding: 8px; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.app-account-dropdown .dropdown-item { display: flex; align-items: center; gap: 12px; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.app-account-dropdown .dropdown-item i { width: 18px; text-align: center; color: var(--muted); }
+.app-account-dropdown .dropdown-header { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 8px 12px; }
+@media (max-width: 991.98px) {
+    .app-navbar-inner { gap: 10px; padding: 0 16px; }
+    .app-navbar .navbar-brand { margin-right: auto; }
+    .app-navbar .navbar-toggler { order: 3; padding: 7px 9px; border-color: #ffffff45; }
+    .app-account-menu { order: 2; }
+    .app-navbar .navbar-collapse { order: 4; flex-basis: 100%; padding-top: 10px; }
+    .app-navbar .nav-link { padding: 11px 12px !important; font-size: 14px; }
+}
+
 .hero-card {
     background: linear-gradient(135deg, var(--primary-soft), #fff);
 }

@@ -12,16 +12,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark shadow-sm">
-        <div class="container-fluid px-4">
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
+        <div class="container-fluid app-navbar-inner">
             <a class="navbar-brand fw-bold" href="{{ url_for('main.index') }}">
                 <i class="fa-solid fa-briefcase me-2"></i>HR Tech OS
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+            {% if current_user %}<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Открыть меню разделов">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNav">
-                {% if current_user %}<ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house me-2"></i>Дашборд</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.candidates_page' %}active{% endif %}" href="{{ url_for('main.candidates_page') }}"><i class="fa-solid fa-users me-2"></i>Кандидаты</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.chat_page' %}active{% endif %}" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comments me-2"></i>Чат</a></li>
@@ -29,11 +29,22 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint in ['main.vacancies_page', 'main.vacancy_new_page', 'main.vacancy_edit_page', 'main.templates_page'] %}active{% endif %}" href="{{ url_for('main.vacancies_page') }}"><i class="fa-solid fa-briefcase me-2"></i>Вакансии</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.interviews_page' %}active{% endif %}" href="{{ url_for('main.interviews_page') }}"><i class="fa-solid fa-calendar-days me-2"></i>Календарь</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.analytics_page' %}active{% endif %}" href="{{ url_for('main.analytics_page') }}"><i class="fa-solid fa-chart-line me-2"></i>Аналитика</a></li>
-                    {% if current_user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="{{ url_for('auth.users') }}">Сотрудники</a></li>{% endif %}
-                    {% if current_user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="{{ url_for('auth.audit_log') }}">Журнал</a></li>{% endif %}
                 </ul>
-                <div class="d-flex align-items-center gap-2 ms-lg-3"><a class="small" href="{{ url_for('auth.password') }}">{{ current_user.name }}</a><form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-secondary">Выйти</button></form></div>{% endif %}
             </div>
+            <div class="dropdown app-account-menu">
+                <button class="app-account-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Меню пользователя" title="Профиль"><i class="fa-solid fa-user" aria-hidden="true"></i></button>
+                <ul class="dropdown-menu dropdown-menu-end app-account-dropdown">
+                    <li><h6 class="dropdown-header">Учётная запись</h6></li>
+                    {% if current_user.role == 'admin' %}
+                    <li><a class="dropdown-item" href="{{ url_for('auth.users') }}"><i class="fa-solid fa-users-gear" aria-hidden="true"></i>Сотрудники</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('auth.audit_log') }}"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>Журнал действий</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    {% endif %}
+                    <li><a class="dropdown-item" href="{{ url_for('auth.password') }}"><i class="fa-solid fa-key" aria-hidden="true"></i>Сменить пароль</a></li>
+                    <li><form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="dropdown-item text-danger" type="submit"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>Выйти</button></form></li>
+                </ul>
+            </div>
+            {% endif %}
         </div>
     </nav>
 
