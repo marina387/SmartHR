@@ -8,8 +8,9 @@ from src.services.parsing import extract_requirements
 from src.services.scoring import get_status_decision
 
 app = Flask(__name__, template_folder='src/templates', static_folder='src/static')
-app.config["SECRET_KEY"] = os.getenv("SMARTHR_SECRET_KEY", "smarthr-local-development-key")
 database_path = Path(os.getenv("SMARTHR_DATABASE", Path(__file__).resolve().parent / "data" / "smarthr.db"))
+from src.services.auth import load_secret, install_auth
+app.config['SECRET_KEY'] = load_secret(database_path.parent)
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{database_path.as_posix()}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -22,6 +23,7 @@ from src import models  # noqa: E402,F401
 from src.routes.main import main_bp  # noqa: E402
 
 app.register_blueprint(main_bp)
+install_auth(app)
 
 # Unknown routes and methods are resolved before a blueprint is selected.
 from src.services.api_validation import api_http_error

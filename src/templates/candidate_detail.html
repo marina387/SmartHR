@@ -222,8 +222,7 @@
                     </select>
                     <label for="manualTransferReason" class="form-label">Причина переноса</label>
                     <input id="manualTransferReason" class="form-control mb-2" maxlength="1000" required>
-                    <label for="manualTransferHr" class="form-label">Сотрудник HR</label>
-                    <input id="manualTransferHr" class="form-control mb-2" maxlength="100" required>
+                    <p class="small text-muted">Автор действия: {{ current_user.name }}</p>
                     <p class="small text-muted">Будет выполнена переоценка по выбранной вакансии. Кандидат перейдёт в работу HR, в том числе из архива. Прежняя оценка и история сохранятся. Низкий прогноз модели не запрещает перенос.</p>
                     <button type="submit" class="btn btn-outline-primary" {% if not transfer_vacancies %}disabled{% endif %}>Перенести и переоценить</button>
                     <div id="manualTransferError" class="alert alert-danger mt-2" role="alert" hidden></div>
@@ -242,7 +241,7 @@
                     {% for feedback in feedback_items %}
                     <div class="list-group-item px-0">
                         <div class="d-flex justify-content-between flex-wrap gap-2">
-                            <div class="fw-semibold">{{ feedback.created_at }} · {{ feedback.hr_id }}</div>
+                            <div class="fw-semibold">{{ feedback.created_at }} · {{ actor_name(feedback.hr_id) }}</div>
                             <div class="small text-muted">ID: {{ feedback.feedback_id or feedback.id }}</div>
                         </div>
                         <div class="small text-muted mt-2">Комментарий: {{ feedback.comment or 'Без комментария' }}</div>
@@ -322,8 +321,7 @@
                     </div>
                     {% endfor %}
                     <div class="col-md-6">
-                        <label class="form-label">HR ID</label>
-                        <input id="feedbackHrId" class="form-control" value="HR_ANNA">
+                        <span class="small text-muted">Автор: {{ current_user.name }}</span>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Комментарий</label>
@@ -411,7 +409,6 @@ async function submitDecision(candidateId, vacancyId, decision) {
         candidate_id: candidateId,
         vacancy_id: vacancyId,
         decision: decision,
-        hr_id: 'HR_UI',
         comment: ''
       })
     });

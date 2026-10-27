@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}SmartHR — Сотрудники{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Учётные записи сотрудников</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<div class="row g-4"><div class="col-lg-7"><div class="card p-3 border-0 shadow-sm">
+<table class="table"><thead><tr><th>Сотрудник</th><th>Логин</th><th>Роль</th><th>Доступ</th></tr></thead><tbody>
+{% for user in users %}<tr><td>{{ user.name }}</td><td>{{ user.login }}</td><td>{{ 'Администратор' if user.role=='admin' else 'HR' }}</td><td>
+{% if user.id==current_user.id %}Ваша учётная запись{% else %}<form method="post" action="{{ url_for('auth.toggle',user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Отключить' if user.active else 'Включить' }}</button></form>{% endif %}
+</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="col-lg-5"><form method="post" class="card p-4 border-0 shadow-sm">
+<h2 class="h5">Добавить сотрудника</h2><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label for="userName" class="form-label">Фамилия и имя</label><input id="userName" name="name" class="form-control mb-2" required maxlength="200">
+<label for="userLogin" class="form-label">Логин</label><input id="userLogin" name="login" class="form-control mb-2" required minlength="3" maxlength="120" autocomplete="off">
+<label for="userPassword" class="form-label">Начальный пароль</label><input id="userPassword" type="password" name="password" class="form-control mb-2" required minlength="12" maxlength="256" autocomplete="new-password">
+<label for="userRole" class="form-label">Роль</label><select id="userRole" name="role" class="form-select mb-3"><option value="hr">HR</option><option value="admin">Администратор</option></select>
+<button class="btn btn-primary">Создать учётную запись</button></form></div></div>
+{% endblock %}

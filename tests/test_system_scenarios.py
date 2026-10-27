@@ -33,6 +33,12 @@ def system(tmp_path, monkeypatch):
     test_app.config.update(TESTING=True, SECRET_KEY='isolated-test', SQLALCHEMY_DATABASE_URI=f"sqlite:///{(tmp_path / 'system.db').as_posix()}", SQLALCHEMY_TRACK_MODIFICATIONS=False, MAX_CONTENT_LENGTH=16*1024*1024)
     db.init_app(test_app)
     test_app.register_blueprint(routes.main_bp)
+    from app import app as configured_app
+    from src.services.auth import install_auth
+    from src.models import User
+    from werkzeug.security import generate_password_hash
+    install_auth(test_app)
+    test_app.test_client_class=configured_app.test_client_class
     monkeypatch.setattr(routes, 'chat_model', MockChatModel())
     monkeypatch.setattr(routes, 'UPLOAD_DOCS_DIR', tmp_path / 'uploads')
     monkeypatch.setattr(routes, 'DOCS_DIR', ROOT / 'docs/sample_docs')
@@ -42,6 +48,9 @@ def system(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, 'DOCUMENTS', routes._load_documents())
     with test_app.app_context():
         db.create_all()
+        db.session.add(User(id='HR_TEST',login='system-test',name='Тестовый HR',role='admin',active=True,
+                            session_version=1,password_hash=generate_password_hash('test-only-password')))
+        db.session.commit()
         SqlVacancyStorage().save({'id':'VAC_SYS', 'title':'Разработчик', 'status':'active', 'weights':{'hard':50,'soft':30,'management':10,'education':5,'salary':5}})
         for key, name in [('CV_ANNA','Агафонова Анна Сергеевна'),('CV_VERA','Архипова Вера Ивановна')]:
             SqlCandidateStorage().save_candidate({'id':key, 'name':name, 'position':'Разработчик', 'vacancy_id':'VAC_SYS', 'resume_text':'Навыки: Python, SQL. Опыт работы: 5 лет. Высшее образование.', 'lifecycle_status':'active'})

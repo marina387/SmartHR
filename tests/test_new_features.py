@@ -197,7 +197,7 @@ def test_feedback_create_and_list(client: Any, isolated_feature_storage: None) -
     assert list_response.status_code == 200
     items = list_response.get_json()
     assert len(items) == 1
-    assert items[0]["hr_id"] == "HR_ANNA"
+    assert items[0]["hr_id"] == "HR_TEST"
 
 
 def test_interview_cancel_reschedule_complete_syncs_stage(client, isolated_feature_storage):

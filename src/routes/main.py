@@ -18,6 +18,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request, red
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from src.services.app_time import local_now
+from src.services.auth import current_actor
 from src.services.transactions import transactional_request
 from src.services.api_validation import validate_api_request, api_http_error, api_internal_error, sanitize_api_errors
 from werkzeug.exceptions import HTTPException
@@ -348,6 +349,7 @@ def _candidate_for_storage(candidate: Dict[str, Any], score_result: Dict[str, An
 
 def _save_score_history(candidate_id: str, vacancy_id: str, result: Dict[str, Any], source: str) -> None:
     score_result_storage.save({
+        "created_by": current_actor(),
         "candidate_id": candidate_id, "vacancy_id": vacancy_id or "VAC_001",
         "total": result.get("total", 0), "model_probability": result.get("model_probability"),
         "model_version": result.get("model_version"), "scores": result.get("scores", {}),
@@ -597,7 +599,7 @@ def chat_api():
             candidate_id=candidate_id,
             vacancy_id=vacancy_id,
             user_message=message_text, assistant_result=result,
-            created_by=str(payload.get("hr_id") or "HR_SYSTEM"),
+            created_by=current_actor(),
         )
         selected_candidate = storage.get_candidate(candidate_id) if candidate_id else None
         result["context"] = {
@@ -645,7 +647,7 @@ def confirm_chat_action():
     action_type = str(stored_action.get("action_type") or "")
     payload = stored_action.get("action_payload") if isinstance(stored_action.get("action_payload"), dict) else {}
     candidate_id = str(payload.get("candidate_id") or "")
-    hr_id = str(body.get("hr_id") or "HR_CHAT")
+    hr_id = current_actor()
     try:
         if action_type == "change_stage":
             result = candidate_stage_service.transition(
@@ -727,7 +729,7 @@ def get_chat_conversation(conversation_id: str):
 @main_bp.route("/api/chat/messages/<int:message_id>/feedback", methods=["POST"])
 def save_chat_feedback(message_id: int):
     try:
-        return jsonify(_chat_history_service().save_feedback(message_id, request.get_json(silent=True) or {}))
+        return jsonify(_chat_history_service().save_feedback(message_id, {**(request.get_json(silent=True) or {}), "hr_id": current_actor()}))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -1047,6 +1049,7 @@ def get_vacancy_api(vacancy_id: str):
 def create_vacancy_api():
     """Создаёт новую вакансию."""
     body = request.get_json(silent=True) or {}
+    body["created_by"] = current_actor()
     try:
         template_id = str(body.get("template_id", "")).strip()
         payload = body
@@ -1125,6 +1128,7 @@ def get_template_api(template_id: str):
 def create_template_api():
     """Создаёт шаблон вакансии."""
     body = request.get_json(silent=True) or {}
+    body["created_by"] = current_actor()
     try:
         created = template_service.create(body)
         return jsonify(created), 201
@@ -1444,6 +1448,7 @@ def edit_candidate(candidate_id: str):
                        "requirement_checks", "used_weights")
         revisions = list(candidate.get("resume_revisions") or [])
         revisions.append({"saved_at": local_now().isoformat(timespec="seconds"), "vacancy_id": vacancy_id,
+                          "changed_by": current_actor(),
                           "resume_text": candidate.get("resume_text", ""),
                           "result": {key: candidate.get(key) for key in result_keys}})
         candidate["resume_revisions"] = revisions
@@ -1471,7 +1476,7 @@ def update_candidate_stage(candidate_id: str):
     try:
         record = candidate_stage_service.transition(
             candidate_id, vacancy_id, stage,
-            changed_by=str(body.get("hr_id", "HR_SYSTEM")),
+            changed_by=current_actor(),
             reason=str(body.get("reason", "Решение HR")), source="hr",
         )
         return jsonify(record)
@@ -1511,7 +1516,7 @@ def apply_candidate_to_vacancy(candidate_id: str):
     from_vacancy_id = str(body.get("from_vacancy_id", "")).strip()
     to_vacancy_id = str(body.get("to_vacancy_id", "")).strip()
     mode = str(body.get("mode", "add")).strip()
-    hr_id = str(body.get("hr_id", "")).strip()
+    hr_id = current_actor()
     comment = str(body.get("comment", "")).strip()
     target = vacancy_service.get_by_id(to_vacancy_id)
     if not target:
@@ -1573,7 +1578,8 @@ def list_candidate_interviews(candidate_id: str):
     return jsonify(interview_service.list_by_candidate(candidate_id))
 
 
-def _sync_interview_stage(record, hr_id="HR_SYSTEM"):
+def _sync_interview_stage(record, hr_id=None):
+    hr_id = hr_id or current_actor()
     candidate_id, vacancy_id = str(record["candidate_id"]), str(record["vacancy_id"])
     current = candidate_vacancy_storage.find(candidate_id, vacancy_id)
     current_status = (current or {}).get("status")
@@ -1620,7 +1626,7 @@ def create_interview():
     try:
         _validate_interview_application(body)
         record = interview_service.create(body)
-        _sync_interview_stage(record, str(body.get("hr_id") or "HR_SYSTEM"))
+        _sync_interview_stage(record, current_actor())
         return jsonify(record), 201
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -1649,7 +1655,7 @@ def update_interview(interview_id: str):
 
     if not updated:
         return jsonify({"error": "Интервью не найдено"}), 404
-    _sync_interview_stage(updated, str(body.get("hr_id") or "HR_SYSTEM"))
+    _sync_interview_stage(updated, current_actor())
     return jsonify(updated)
 
 
@@ -1676,6 +1682,7 @@ def list_feedback(candidate_id: str):
 def create_feedback():
     """Сохраняет корректировку оценок HR-специалистом."""
     body = request.get_json(silent=True) or {}
+    body["hr_id"] = current_actor()
     if body.get("candidate_id") and not storage.get_candidate(body["candidate_id"]):
         return jsonify({"error": "Кандидат не найден"}), 404
     if body.get("vacancy_id") and not vacancy_service.get_by_id(body["vacancy_id"]):
@@ -1708,7 +1715,7 @@ def create_feedback_decision():
     except (TypeError, ValueError):
         return jsonify({"error": "decision должен быть 0 или 1"}), 400
 
-    hr_id = str(body.get("hr_id", "HR_UI")).strip() or "HR_UI"
+    hr_id = current_actor()
     comment = str(body.get("comment", "")).strip()
 
     # Считаем фичи через новую модель, чтобы сохранить контекст решения.

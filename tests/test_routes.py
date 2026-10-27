@@ -156,7 +156,7 @@ def test_vacancy_api_save_get_update_weights(client: Any, isolated_vacancy_stora
     )
     assert update_response.status_code == 200
     updated = update_response.get_json()
-    assert updated["created_by"] == "HR_ANNA"
+    assert updated["created_by"] == "HR_TEST"
     assert sum(updated["weights"].values()) == 100
 
     get_saved = client.get(f"/api/vacancies/{vacancy_id}")

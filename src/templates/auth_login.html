@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}SmartHR — {{ 'Первый администратор' if setup else 'Вход' }}{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-0 p-4 mx-auto mt-4" style="max-width:480px">
+    <h1 class="h3 mb-3">{{ 'Первый администратор' if setup else 'Вход в SmartHR' }}</h1>
+    {% if setup %}<p class="text-muted">Создайте личную учётную запись администратора. После настройки вы сможете добавить сотрудников HR.</p>{% endif %}
+    {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if setup %}<label for="authName" class="form-label">Фамилия и имя</label><input id="authName" name="name" class="form-control mb-3" required maxlength="200" autocomplete="name">{% endif %}
+        <label for="authLogin" class="form-label">Логин</label>
+        <input id="authLogin" name="login" class="form-control mb-3" required minlength="3" maxlength="120" autocomplete="username" autocapitalize="none">
+        <label for="authPassword" class="form-label">Пароль</label>
+        <input id="authPassword" type="password" name="password" class="form-control mb-3" required {% if setup %}minlength="12"{% endif %} maxlength="256" autocomplete="{{ 'new-password' if setup else 'current-password' }}">
+        {% if setup %}<p class="small text-muted">Не менее 12 символов. Пароль хранится в виде защищённого хеша.</p>{% endif %}
+        <button type="submit" class="btn btn-primary w-100">{{ 'Создать администратора' if setup else 'Войти' }}</button>
+    </form>
+</div>
+{% endblock %}

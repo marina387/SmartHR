@@ -8,6 +8,33 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.extensions import db
 
 
+class User(db.Model):
+    __tablename__ = 'users'
+    id: Mapped[str] = mapped_column(db.String(64), primary_key=True)
+    login: Mapped[str] = mapped_column(db.String(120), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(db.String(200), nullable=False)
+    password_hash: Mapped[str] = mapped_column(db.Text, nullable=False)
+    role: Mapped[str] = mapped_column(db.String(20), nullable=False)
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    session_version: Mapped[int] = mapped_column(default=1, nullable=False)
+
+
+class AuthBootstrap(db.Model):
+    __tablename__ = 'auth_bootstrap'
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+class AuditEvent(db.Model):
+    __tablename__ = 'audit_events'
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id', ondelete='RESTRICT'), nullable=False)
+    user_name: Mapped[str] = mapped_column(db.String(200), nullable=False)
+    endpoint: Mapped[str] = mapped_column(db.String(160), nullable=False)
+    path: Mapped[str] = mapped_column(db.String(400), nullable=False)
+    method: Mapped[str] = mapped_column(db.String(10), nullable=False)
+    created_at: Mapped[str] = mapped_column(db.String(40), nullable=False)
+
+
 class PayloadMixin:
     payload: Mapped[dict] = mapped_column(db.JSON, default=dict, nullable=False)
 

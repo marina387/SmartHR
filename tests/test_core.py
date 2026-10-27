@@ -11,8 +11,11 @@ SPEC.loader.exec_module(module)
 
 def test_upload_accepts_json_payload():
     client = module.app.test_client()
+    with client.session_transaction() as session:
+        session.update(user_id='HR_TEST',user_version=1,csrf='test-csrf-token')
     response = client.post(
         "/api/upload",
+        headers={'X-CSRF-Token':'test-csrf-token'},
         json={"text": "Имя: Иван\nКоммуникация, управление проектами", "filename": "resume.txt"},
     )
 

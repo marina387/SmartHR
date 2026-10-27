@@ -21,7 +21,7 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="mainNav">
-                <ul class="navbar-nav ms-auto">
+                {% if current_user %}<ul class="navbar-nav ms-auto">
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house me-2"></i>Дашборд</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.candidates_page' %}active{% endif %}" href="{{ url_for('main.candidates_page') }}"><i class="fa-solid fa-users me-2"></i>Кандидаты</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.chat_page' %}active{% endif %}" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comments me-2"></i>Чат</a></li>
@@ -29,7 +29,10 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint in ['main.vacancies_page', 'main.vacancy_new_page', 'main.vacancy_edit_page', 'main.templates_page'] %}active{% endif %}" href="{{ url_for('main.vacancies_page') }}"><i class="fa-solid fa-briefcase me-2"></i>Вакансии</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.interviews_page' %}active{% endif %}" href="{{ url_for('main.interviews_page') }}"><i class="fa-solid fa-calendar-days me-2"></i>Календарь</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'main.analytics_page' %}active{% endif %}" href="{{ url_for('main.analytics_page') }}"><i class="fa-solid fa-chart-line me-2"></i>Аналитика</a></li>
+                    {% if current_user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="{{ url_for('auth.users') }}">Сотрудники</a></li>{% endif %}
+                    {% if current_user.role == 'admin' %}<li class="nav-item"><a class="nav-link" href="{{ url_for('auth.audit_log') }}">Журнал</a></li>{% endif %}
                 </ul>
+                <div class="d-flex align-items-center gap-2 ms-lg-3"><a class="small" href="{{ url_for('auth.password') }}">{{ current_user.name }}</a><form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-secondary">Выйти</button></form></div>{% endif %}
             </div>
         </div>
     </nav>
@@ -40,6 +43,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="{{ url_for('static', filename='js/session.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% if page_scripts %}
     {% for script in page_scripts %}

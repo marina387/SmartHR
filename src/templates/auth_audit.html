@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}SmartHR — Журнал действий{% endblock %}
+{% block content %}
+<h1 class="h3">Журнал действий</h1><p class="text-muted">Последние 200 успешных запросов на изменение или выполнение операции. Автор определяется сервером. Тексты резюме и пароли в журнал не записываются.</p>
+<div class="table-responsive card border-0 p-3"><table class="table"><thead><tr><th>Время</th><th>Сотрудник</th><th>Операция</th><th>Объект</th></tr></thead><tbody>
+{% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.user_name }}<div class="small text-muted">{{ event.user_id }}</div></td><td>{{ event.endpoint }} · {{ event.method }}</td><td>{{ event.path }}</td></tr>{% else %}<tr><td colspan="4">Действий пока нет.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

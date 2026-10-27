@@ -99,3 +99,31 @@ def pytest_unconfigure(config):
     if hasattr(config, "_smarthr_symlink"):
         import _pytest.pathlib
         _pytest.pathlib._force_symlink = config._smarthr_symlink
+
+
+@pytest.fixture(autouse=True)
+def authenticated_business_clients(request, monkeypatch, isolated_application):
+    """Existing business tests run as a real session user; auth tests use anonymous clients."""
+    if request.node.get_closest_marker('auth'):
+        return
+    from app import app
+    from src.extensions import db
+    from src.models import User
+    from flask.testing import FlaskClient
+    from werkzeug.security import generate_password_hash
+    with app.app_context():
+        user=db.session.get(User,'HR_TEST')
+        if not user:
+            user=User(id='HR_TEST',login='test-admin',name='Тестовый HR',role='admin',active=True,
+                      session_version=1,password_hash=generate_password_hash('test-only-password'))
+            db.session.add(user)
+            db.session.commit()
+    class SignedClient(FlaskClient):
+        def open(self,*args,**kwargs):
+            with self.session_transaction() as session:
+                session.update(user_id='HR_TEST',user_version=1,csrf='test-csrf-token')
+            headers=dict(kwargs.pop('headers',{}) or {})
+            headers.setdefault('X-CSRF-Token','test-csrf-token')
+            kwargs['headers']=headers
+            return super().open(*args,**kwargs)
+    monkeypatch.setattr(app,'test_client_class',SignedClient)

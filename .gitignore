@@ -52,3 +52,4 @@ models/**
 !models/model_metadata.json
 *.safetensors
 *.bin
+.session-secret

@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({manual_transfer:true, mode:'transfer',
                     from_vacancy_id:transferForm.dataset.currentVacancy,
                     to_vacancy_id:document.getElementById('manualTransferVacancy').value,
-                    hr_id:document.getElementById('manualTransferHr').value,
                     comment:document.getElementById('manualTransferReason').value}),
             });
             const data = await response.json();
@@ -137,7 +136,6 @@ async function saveFeedback(candidateId, vacancyId, originalScores) {
         original_scores: originalScores,
         corrected_scores: correctedScores,
         comment: document.getElementById("feedbackComment")?.value || "",
-        hr_id: document.getElementById("feedbackHrId")?.value || "HR_ANNA",
     };
 
     try {
@@ -209,8 +207,7 @@ async function applyAlternative(candidateId, currentVacancyId, item, mode) {
                 from_vacancy_id: currentVacancyId,
                 to_vacancy_id: item.vacancy_id,
                 mode,
-                hr_id: document.getElementById("feedbackHrId")?.value || "HR_ANNA",
-                comment: "Подтверждено в карточке кандидата",
+                        comment: "Подтверждено в карточке кандидата",
             }),
         });
         const data = await response.json();
@@ -298,7 +295,7 @@ async function updateCandidateStage(candidateId, vacancyId) {
         const response = await fetch(`/api/candidates/${encodeURIComponent(candidateId)}/stage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ vacancy_id: vacancyId, stage, hr_id: "HR_ANNA", reason: "Обновлено в карточке кандидата" }),
+            body: JSON.stringify({ vacancy_id: vacancyId, stage, reason: "Обновлено в карточке кандидата" }),
         });
         const data = await response.json();
         if (!response.ok || data.error) throw new Error(data.error || "Этап не обновлён");
