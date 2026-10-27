@@ -211,6 +211,34 @@ def test_selected_candidate_generic_followups(system):
         assert 'Агафонова' in ask(system,query,cid)['answer']
 
 
+def test_manual_transfer_bypasses_recommendations_and_keeps_history(system, monkeypatch):
+    SqlVacancyStorage().save({'id':'VAC_TARGET','title':'Стажёр','status':'active'})
+    before = SqlCandidateStorage().get_candidate('CV_VERA')
+    before['lifecycle_status'] = 'archived'
+    SqlCandidateStorage().save_candidate(before)
+    def no_recommendations(*args, **kwargs):
+        raise AssertionError('Manual transfer must not depend on recommendations')
+    monkeypatch.setattr(routes.AlternativeVacancyService,'find_alternatives',no_recommendations)
+    def low_score(text, requirements, weights, vacancy):
+        assert text == before['resume_text'] and vacancy['id'] == 'VAC_TARGET'
+        return {'total':12,'status':'red','decision':'Отклонен','scores':{'hard':1.2},
+                'comments':{'hard':'Низкий прогноз'},'model_probability':.01,'critical_failures':[],
+                'score_status':'calculated','features':{'experience_years':0}}
+    monkeypatch.setattr(routes.scoring_service,'score_candidate',low_score)
+    body = dict(from_vacancy_id='VAC_SYS',to_vacancy_id='VAC_TARGET',mode='transfer',
+                hr_id='HR_TEST',comment='Решение HR',manual_transfer=True)
+    assert system.post('/api/candidates/CV_VERA/vacancies',json={**body,'from_vacancy_id':'wrong'}).status_code == 400
+    assert system.post('/api/candidates/CV_VERA/vacancies',json={**body,'comment':''}).status_code == 400
+    response = system.post('/api/candidates/CV_VERA/vacancies',json=body)
+    assert response.status_code == 201, response.get_json()
+    saved = SqlCandidateStorage().get_candidate('CV_VERA')
+    assert saved['vacancy_id']=='VAC_TARGET' and saved['total']==12 and saved['lifecycle_status']=='active'
+    assert saved['resume_text']==before['resume_text'] and saved['position']=='Стажёр'
+    assert routes.candidate_vacancy_storage.find('CV_VERA','VAC_TARGET')['status']=='in_review'
+    assert routes.candidate_vacancy_storage.find('CV_VERA','VAC_SYS')['status']=='transferred'
+    assert system.post('/api/candidates/CV_VERA/vacancies',json=body).status_code == 400
+
+
 @pytest.mark.parametrize('via_chat',[False,True])
 def test_transfer_routes_update_candidate_score_and_conversation(system,monkeypatch,via_chat):
     SqlVacancyStorage().save({'id':'VAC_TARGET','title':'Аналитик','status':'active','weights':{'hard':100,'soft':0,'management':0,'education':0,'salary':0}})

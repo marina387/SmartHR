@@ -213,6 +213,20 @@
                     </div>
                     <button id="refreshAlternativesBtn" class="btn btn-outline-primary btn-sm" type="button">Найти вакансии</button>
                 </div>
+                <form id="manualTransferForm" class="border rounded p-3 mb-3" data-candidate-id="{{ candidate.id }}" data-current-vacancy="{{ candidate.vacancy_id }}">
+                    <label for="manualTransferVacancy" class="form-label">Перенос по решению HR</label>
+                    <select id="manualTransferVacancy" class="form-select mb-2" required>
+                        <option value="">Выберите активную вакансию</option>
+                        {% for item in transfer_vacancies %}<option value="{{ item.id }}">{{ item.title or item.name }} · {{ item.id }}</option>{% endfor %}
+                    </select>
+                    <label for="manualTransferReason" class="form-label">Причина переноса</label>
+                    <input id="manualTransferReason" class="form-control mb-2" maxlength="1000" required>
+                    <label for="manualTransferHr" class="form-label">Сотрудник HR</label>
+                    <input id="manualTransferHr" class="form-control mb-2" maxlength="100" required>
+                    <p class="small text-muted">Будет выполнена переоценка по выбранной вакансии. Кандидат перейдёт в работу HR, в том числе из архива. Прежняя оценка и история сохранятся. Низкий прогноз модели не запрещает перенос.</p>
+                    <button type="submit" class="btn btn-outline-primary" {% if not transfer_vacancies %}disabled{% endif %}>Перенести и переоценить</button>
+                    <div id="manualTransferError" class="alert alert-danger mt-2" role="alert" hidden></div>
+                </form>
                 <div id="alternativeVacanciesState" class="small text-muted">Поиск рекомендаций...</div>
                 <div id="alternativeVacanciesList" class="row g-3"></div>
             </div>

@@ -1,4 +1,29 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const transferForm = document.getElementById('manualTransferForm');
+    transferForm?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const button = transferForm.querySelector('[type="submit"]');
+        const error = document.getElementById('manualTransferError');
+        button.disabled = true;
+        error.hidden = true;
+        try {
+            const response = await fetch('/api/candidates/' + encodeURIComponent(transferForm.dataset.candidateId) + '/vacancies', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({manual_transfer:true, mode:'transfer',
+                    from_vacancy_id:transferForm.dataset.currentVacancy,
+                    to_vacancy_id:document.getElementById('manualTransferVacancy').value,
+                    hr_id:document.getElementById('manualTransferHr').value,
+                    comment:document.getElementById('manualTransferReason').value}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Перенос не выполнен');
+            window.location.reload();
+        } catch (err) {
+            error.textContent = err.message;
+            error.hidden = false;
+            button.disabled = false;
+        }
+    });
     const form = document.getElementById("editCandidateForm");
     if (!form) return;
     form.addEventListener("submit", async (event) => {

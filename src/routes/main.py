@@ -501,6 +501,7 @@ def candidate_detail(candidate_id: str):
         current_stage=current_stage,
         page_script="candidate_detail.js",
         archive_explanation=archive_explanation(candidate),
+        transfer_vacancies=[v for v in vacancy_service.get_all() if v.get('status') == 'active' and v.get('id') != vacancy_id],
     )
 
 
@@ -1507,19 +1508,47 @@ def apply_candidate_to_vacancy(candidate_id: str):
     mode = str(body.get("mode", "add")).strip()
     hr_id = str(body.get("hr_id", "")).strip()
     comment = str(body.get("comment", "")).strip()
-    if not vacancy_service.get_by_id(to_vacancy_id):
+    target = vacancy_service.get_by_id(to_vacancy_id)
+    if not target:
         return jsonify({"error": "Целевая вакансия не найдена"}), 404
+    manual_transfer = body.get('manual_transfer', False)
+    if not isinstance(manual_transfer, bool):
+        return jsonify(error="manual_transfer должно быть true или false"), 400
     try:
-        finder = AlternativeVacancyService(storage, vacancy_service, scoring_service, candidate_vacancy_storage)
-        alternatives = finder.find_alternatives(candidate_id, from_vacancy_id, 10)["alternatives"]
-        recommendation = next((item for item in alternatives if item["vacancy_id"] == to_vacancy_id), None)
+        if manual_transfer:
+            candidate = storage.get_candidate(candidate_id)
+            if not candidate:
+                return jsonify(error="Кандидат не найден"), 404
+            if mode != 'transfer' or candidate.get('vacancy_id') != from_vacancy_id:
+                return jsonify(error="Текущая вакансия изменилась. Обновите карточку"), 400
+            if target.get('status') != 'active' or from_vacancy_id == to_vacancy_id:
+                return jsonify(error="Выберите другую активную вакансию"), 400
+            if not hr_id or not comment:
+                return jsonify(error="Укажите сотрудника и причину переноса"), 400
+            if not str(candidate.get('resume_text') or '').strip():
+                return jsonify(error="Для переоценки нужен текст резюме"), 400
+            recommendation = scoring_service.score_candidate(candidate['resume_text'], [],
+                vacancy_service.weights_for_vacancy(to_vacancy_id), vacancy=target)
+            recommendation.update(current_total=candidate.get('total'), vacancy_id=to_vacancy_id)
+        else:
+            finder = AlternativeVacancyService(storage, vacancy_service, scoring_service, candidate_vacancy_storage)
+            alternatives = finder.find_alternatives(candidate_id, from_vacancy_id, 10)["alternatives"]
+            recommendation = next((item for item in alternatives if item["vacancy_id"] == to_vacancy_id), None)
         if not recommendation:
             return jsonify({"error": "Целевая вакансия не является актуальной рекомендацией"}), 400
         result = candidate_vacancy_service.apply(
             candidate_id, from_vacancy_id, to_vacancy_id, mode, hr_id, comment, recommendation
         )
         if mode == "transfer":
+            if manual_transfer:
+                _save_score_history(candidate_id, from_vacancy_id, candidate, 'before_manual_transfer')
             _save_transfer_result(candidate_id, to_vacancy_id, recommendation)
+            if manual_transfer:
+                saved = _retention_service().restore(candidate_id)
+                saved.update(position=target.get('title') or target.get('name'), vacancy_title=target.get('title') or target.get('name'),
+                             decision=recommendation.get('decision'), features=recommendation.get('features', {}),
+                             missing_fields=recommendation.get('missing_fields', []))
+                storage.save_candidate(saved)
         return jsonify(result), 201
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
