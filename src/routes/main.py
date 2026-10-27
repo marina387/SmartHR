@@ -227,6 +227,9 @@ def _russian_date_label(value: datetime) -> str:
 
 def _candidate_view_model(candidate: Dict[str, Any]) -> Dict[str, Any]:
     """Преобразует запись кандидата к удобному для шаблона виду."""
+    from src.services.score_explanation import align_saved_explanation
+    if candidate.get('id'):
+        candidate = align_saved_explanation(candidate, score_result_storage.list_by_candidate(candidate['id']))
     status = str(candidate.get("status", "yellow"))
     meta = _status_meta(status)
     total = candidate.get("total", 0)
@@ -1487,6 +1490,8 @@ def _save_transfer_result(candidate_id, target_id, recommendation):
         "status": get_status_decision(total)[0], "scores": recommendation.get("scores", {}),
         "model_probability": recommendation.get("model_probability"),
         "model_version": recommendation.get("model_version"),
+        "features": recommendation.get("features", {}),
+        "missing_fields": recommendation.get("missing_fields", []),
         "used_weights": recommendation.get("used_weights", {}),
         "evidence": recommendation.get("evidence", {}),
         "comments": recommendation.get("comments", {}),

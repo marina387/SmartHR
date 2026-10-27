@@ -60,7 +60,7 @@ def isolated_feature_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(main_routes, "candidate_stage_service", stage_service)
     monkeypatch.setattr(main_routes, "candidate_vacancy_service", CandidateVacancyService(candidate_vacancy_storage, transfer_storage, stage_service))
     monkeypatch.setattr(main_routes, "funnel_service", FunnelService(candidate_vacancy_storage, stage_event_storage, candidate_storage))
-    monkeypatch.setattr(main_routes, "score_result_storage", SimpleNamespace(save=lambda payload: payload))
+    monkeypatch.setattr(main_routes, "score_result_storage", SimpleNamespace(save=lambda payload: payload, list_by_candidate=lambda candidate_id: []))
 
 
 def test_manual_candidate_creation(client: Any, isolated_feature_storage: None) -> None:

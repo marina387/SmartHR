@@ -147,7 +147,8 @@
                 </div>
                 {% if candidate.missing_fields %}
                 <div class="alert alert-warning mt-3 mb-0">
-                    Не найдены поля резюме: {{ candidate.missing_fields | join(', ') }}. Для них применены нейтральные значения.
+                    Не указаны или не распознаны: {{ candidate.scoring_explanation.missing_labels | join(', ') }}.
+                    Отсутствие данных не означает отсутствие навыка или опыта. Подстановки численных значений описаны в обосновании оценки.
                 </div>
                 {% endif %}
             </div>
