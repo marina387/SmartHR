@@ -51,7 +51,11 @@ def test_login_logout_csrf_and_roles(accounts):
     c=client()
     assert c.post('/login',data={'login':'auth_hr','password':'correct-password-123'}).status_code==403
     assert sign_in(c,'auth_hr').status_code==302
-    assert c.get('/').status_code==200
+    page=c.get('/')
+    assert page.status_code==200
+    html=page.get_data(as_text=True)
+    assert 'Добро пожаловать, AUTH_HR' in html and 'Специалист HR' in html
+    assert 'Анна Смирнова' not in html and 'Head of Talent Acquisition' not in html
     assert c.get('/admin/users').status_code==403
     assert c.post('/admin/users',data={}).status_code==403
     assert c.post('/api/candidates/manual',json={}).status_code==403

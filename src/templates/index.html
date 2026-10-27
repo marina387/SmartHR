@@ -10,7 +10,7 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
                     <div>
                         <div class="eyebrow">HR-Tech Platform</div>
-                        <h1 class="h3 fw-bold mb-2">Добро пожаловать, Анна Смирнова</h1>
+                        <h1 class="h3 fw-bold mb-2">Добро пожаловать, {{ current_user.name }}</h1>
                         <p class="text-muted mb-0">Сегодня {{ today_label }}. Следите за новыми откликами, статусами и интервью.</p>
                     </div>
                     <div class="d-flex align-items-center gap-3">
@@ -18,8 +18,8 @@
                             <i class="fa-solid fa-user"></i>
                         </div>
                         <div>
-                            <div class="fw-semibold">Анна Смирнова</div>
-                            <div class="small text-muted">Head of Talent Acquisition</div>
+                            <div class="fw-semibold">{{ current_user.name }}</div>
+                            <div class="small text-muted">{{ 'Администратор' if current_user.role == 'admin' else 'Специалист HR' }}</div>
                         </div>
                     </div>
                 </div>
