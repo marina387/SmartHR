@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from src.config import FUNNEL_STAGES
 
-from src.services.alternative_vacancy_service import AlternativeVacancyService
+from src.services.alternative_vacancy_service import AlternativeVacancyService, SemanticUnavailable
 from src.services.candidate_vacancy_service import CandidateVacancyService
 from src.services.skill_matching import SkillMatcher
 from src.services.vacancy_service import VacancyService
@@ -32,7 +32,8 @@ def test_skill_matcher_supports_alias_and_fuzzy_match() -> None:
 
 
 @pytest.mark.parametrize('linked_stage',[None,*FUNNEL_STAGES,'rejected','withdrawn','archived'])
-def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch, linked_stage) -> None:
+@pytest.mark.parametrize('encoder_available',[True,False])
+def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch, linked_stage, encoder_available) -> None:
     candidates = FileCandidateStorage(tmp_path / "candidates.json")
     vacancies_store = VacancyStorage(tmp_path / "vacancies.json")
     relations = CandidateVacancyStorage(tmp_path / "relations.json")
@@ -48,7 +49,11 @@ def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch, link
     service = AlternativeVacancyService(candidates, VacancyService(vacancies_store), FakeScoringService(), relations)
     if linked_stage:
         relations.save({'candidate_id':'CV_001','vacancy_id':'VAC_002','status':linked_stage})
-    monkeypatch.setattr(service, "_semantic_sims", lambda resume, pool: {v["id"]: 0.9 for v in pool})
+    def missing_encoder():
+        raise SemanticUnavailable('No local model')
+    monkeypatch.setattr(service, '_get_encoder', missing_encoder)
+    if encoder_available:
+        monkeypatch.setattr(service, "_semantic_sims", lambda resume, pool: {v["id"]: 0.9 for v in pool})
     result = service.find_alternatives("CV_001", "VAC_001")
     if linked_stage in FUNNEL_STAGES:
         assert result['alternatives']==[]
@@ -56,6 +61,16 @@ def test_alternative_service_filters_and_ranks(tmp_path: Path, monkeypatch, link
     assert [item["vacancy_id"] for item in result["alternatives"]] == ["VAC_002"]
     assert result["alternatives"][0]["score_improvement"] == 25
     assert not result["alternatives"][0]["missing_skills"]
+    assert result['search_mode'] == ('semantic' if encoder_available else 'structured')
+    assert bool(result['warning']) == (not encoder_available)
+    if not encoder_available:
+        assert result['alternatives'][0]['semantic_similarity'] is None
+        assert 'не выполнялась' in result['alternatives'][0]['reason']
+    original = service.scoring_service.score_candidate
+    def low_score(*args, **kwargs):
+        return {**original(*args, **kwargs), 'total':20, 'model_probability':.1}
+    monkeypatch.setattr(service.scoring_service,'score_candidate',low_score)
+    assert service.find_alternatives('CV_001','VAC_001')['alternatives'] == []
 
 
 def test_add_and_transfer_create_relations_and_audit(tmp_path: Path) -> None:

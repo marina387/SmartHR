@@ -31,6 +31,10 @@ SEMANTIC_MARGIN = 0.05
 ACTIVE_LINK_STATUSES = {*FUNNEL_STAGES, "active", "in_progress", "активна", "в работе"}
 
 
+class SemanticUnavailable(ValueError):
+    """Optional local encoder is unavailable; structured scoring remains usable."""
+
+
 class AlternativeVacancyService:
     def __init__(self, candidate_storage: FileCandidateStorage, vacancy_service: VacancyService,
                  scoring_service: CandidateScoringService, relation_storage: CandidateVacancyStorage,
@@ -44,11 +48,11 @@ class AlternativeVacancyService:
 
     def _get_encoder(self):
         if self._encoder is None:
-            from sentence_transformers import SentenceTransformer
             try:
+                from sentence_transformers import SentenceTransformer
                 self._encoder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", local_files_only=True)
-            except (OSError, RuntimeError) as exc:
-                raise ValueError("Семантический поиск альтернатив недоступен: локальная модель поиска отсутствует. Данные кандидата не изменены.") from exc
+            except (ImportError, OSError, RuntimeError) as exc:
+                raise SemanticUnavailable("Локальная модель семантического поиска недоступна") from exc
         return self._encoder
 
     def _candidate(self, candidate_id: str) -> Dict[str, Any]:
@@ -115,7 +119,12 @@ class AlternativeVacancyService:
                 and str(v.get("status", "active")).casefold() in {"active", "активна"}]
 
         # Один батч-вызов энкодера вместо N отдельных.
-        sims = self._semantic_sims(resume_text, pool)
+        warning = None
+        try:
+            sims = self._semantic_sims(resume_text, pool)
+        except SemanticUnavailable:
+            sims = None
+            warning = 'Поиск выполнен по требованиям, навыкам и оценке соответствия. Семантическая проверка текста недоступна.'
 
         results: List[Dict[str, Any]] = []
         for vacancy in pool:
@@ -130,7 +139,7 @@ class AlternativeVacancyService:
             probability = float(score.get("model_probability") or 0)
             total = int(score["total"])
             improvement = total - current_total
-            semantic = float(sims.get(vacancy_id, 0.0))
+            semantic = float(sims.get(vacancy_id, 0.0)) if sims is not None else None
 
             is_strong = total >= STRONG_MATCH_SCORE and probability >= STRONG_MATCH_PROBABILITY
             has_improvement = improvement >= ALTERNATIVE_MIN_IMPROVEMENT
@@ -140,7 +149,7 @@ class AlternativeVacancyService:
                 continue
             if total < ALTERNATIVE_MIN_SCORE or probability < ALTERNATIVE_MIN_PROBABILITY:
                 continue
-            if semantic < SEMANTIC_MIN_SIMILARITY:
+            if semantic is not None and semantic < SEMANTIC_MIN_SIMILARITY:
                 continue
 
             skill_details = self.skill_matcher.compare(
@@ -152,7 +161,7 @@ class AlternativeVacancyService:
                 "total": total, "current_total": current_total,
                 "score_improvement": improvement,
                 "model_probability": probability,
-                "semantic_similarity": round(semantic, 4),
+                "semantic_similarity": round(semantic, 4) if semantic is not None else None,
                 "strong_match": is_strong,
                 "model_version": score.get("model_version"),
                 "used_weights": score.get("used_weights", {}),
@@ -171,12 +180,15 @@ class AlternativeVacancyService:
             "candidate_id": candidate_id,
             "current_vacancy_id": current_vacancy_id,
             "current_total": current_total,
+            "search_mode": 'structured' if sims is None else 'semantic',
+            "warning": warning,
             "alternatives": results[:max(1, min(int(limit), 10))],
         }
 
     @staticmethod
-    def _reason(score: Dict[str, Any], skill_details: Dict[str, Any], semantic: float) -> str:
+    def _reason(score: Dict[str, Any], skill_details: Dict[str, Any], semantic: float | None) -> str:
         matched = len(skill_details["matches"])
         required = skill_details["required_count"]
         return (f"Итог {score['total']}/100, ML-вероятность {score['model_probability']:.1%}, "
-                f"навыки {matched}/{required}, семантическое сходство {semantic:.2f}")
+                f"навыки {matched}/{required}, " + (f"семантическое сходство {semantic:.2f}" if semantic is not None
+                                                   else "семантическая проверка не выполнялась"))

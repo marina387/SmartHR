@@ -2,10 +2,12 @@ const TEMPLATE_CRITERIA = ["hard", "soft", "management", "education", "salary"];
 
 function templatesShowToast(message, type) {
     const toast = document.createElement("div");
-    toast.className = "toast " + (type || "green");
+    toast.className = "app-notice " + (type || "green");
     toast.textContent = message;
+    toast.setAttribute("role", type === "red" ? "alert" : "status");
+    toast.setAttribute("aria-live", type === "red" ? "assertive" : "polite");
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => toast.remove(), type === "red" ? 9000 : 4500);
 }
 
 function getTemplatesPageData() {

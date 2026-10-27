@@ -50,10 +50,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function detailShowToast(message, type) {
     const toast = document.createElement("div");
-    toast.className = "toast " + (type || "green");
+    toast.className = "app-notice " + (type || "green");
     toast.textContent = message;
+    toast.setAttribute("role", type === "red" ? "alert" : "status");
+    toast.setAttribute("aria-live", type === "red" ? "assertive" : "polite");
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => toast.remove(), type === "red" ? 9000 : 4500);
 }
 
 function readJsonFromElement(elementId, fallback) {
@@ -279,6 +281,7 @@ async function loadAlternatives(candidateId, currentVacancyId) {
         const data = await response.json();
         if (!response.ok || data.error) throw new Error(data.error || "Не удалось получить рекомендации");
         renderAlternatives(candidateId, currentVacancyId, data.alternatives || []);
+        if (state && data.warning) state.textContent = data.warning + ' ' + (state.textContent || '');
     } catch (err) {
         if (state) state.textContent = "Ошибка поиска: " + err.message;
     }
