@@ -33,12 +33,12 @@
                 </select>
             </div>
             <div class="col-lg-2">
-                <label class="form-label small text-uppercase">Статус</label>
+                <label class="form-label small text-uppercase">Автооценка</label>
                 <select class="form-select" name="status" form="filtersForm">
                     <option value="all" {% if selected_status == 'all' %}selected{% endif %}>Все</option>
-                    <option value="green" {% if selected_status == 'green' %}selected{% endif %}>Одобрен</option>
-                    <option value="yellow" {% if selected_status == 'yellow' %}selected{% endif %}>На проверке</option>
-                    <option value="red" {% if selected_status == 'red' %}selected{% endif %}>Отклонён</option>
+                    <option value="green" {% if selected_status == 'green' %}selected{% endif %}>Высокая</option>
+                    <option value="yellow" {% if selected_status == 'yellow' %}selected{% endif %}>Средняя</option>
+                    <option value="red" {% if selected_status == 'red' %}selected{% endif %}>Низкая</option>
                 </select>
             </div>
             <div class="col-lg-2">
@@ -90,7 +90,7 @@
                         <td>{{ loop.index + (page - 1) * 6 }}</td>
                         <td>
                             <div class="fw-semibold">{{ candidate.name }}</div>
-                            <div class="small text-muted">{{ candidate.email }}</div>
+                            <div class="small text-muted">{{ candidate.email or 'Не указано' }}</div>
                         </td>
                         <td>{{ candidate.position }}</td>
                         <td>
@@ -102,7 +102,7 @@
                             {% if candidate.lifecycle_status == 'archived' %}
                             <span class="badge rounded-pill bg-secondary">📦 Архив</span>
                             {% else %}
-                            <span class="status-badge badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.icon }} {{ candidate.status_meta.label }}</span>
+                            <span class="badge rounded-pill {{ candidate.workflow_meta.badge }}">{{ candidate.workflow_meta.label }}</span>
                             {% endif %}
                         </td>
                         <td>

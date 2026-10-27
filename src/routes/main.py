@@ -190,9 +190,9 @@ def _chat_action_serializer() -> URLSafeTimedSerializer:
 def _status_meta(status: str) -> Dict[str, str]:
     """Возвращает метаданные статуса для бейджей и иконок."""
     mapping = {
-        "green": {"badge": "bg-success", "icon": "🟢", "label": "Одобрен"},
-        "yellow": {"badge": "bg-warning text-dark", "icon": "🟡", "label": "На проверке"},
-        "red": {"badge": "bg-danger", "icon": "🔴", "label": "Отклонён"},
+        "green": {"badge": "bg-success", "icon": "🟢", "label": "Высокая автооценка"},
+        "yellow": {"badge": "bg-warning text-dark", "icon": "🟡", "label": "Средняя автооценка"},
+        "red": {"badge": "bg-danger", "icon": "🔴", "label": "Низкая автооценка"},
     }
     return mapping.get(status, mapping["yellow"])
 
@@ -232,15 +232,15 @@ def _candidate_view_model(candidate: Dict[str, Any]) -> Dict[str, Any]:
     total = candidate.get("total", 0)
     from src.services.score_explanation import explain_result
     explanation = explain_result(candidate)
+    from src.services.candidate_presentation import candidate_fields, workflow_meta
+    relation = candidate_vacancy_storage.find(candidate.get('id'), candidate.get('vacancy_id')) if candidate.get('id') and candidate.get('vacancy_id') else None
     return {
         **candidate,
         "status_meta": meta,
+        "workflow_meta": workflow_meta(candidate, relation),
         "score": int(total) if isinstance(total, int) else int(total or 0),
-        "position": candidate.get("position") or "Специалист",
-        "email": candidate.get("email") or "",
-        "phone": candidate.get("phone") or "",
-        "skills": candidate.get("skills") or ["Аналитика", "Коммуникация"],
-        "experience": candidate.get("experience") or ["3+ года опыта", "Опыт взаимодействия со стейкхолдерами"],
+        "position": candidate.get("position") or "Не указано",
+        **candidate_fields(candidate),
         "comments": candidate.get("comments") or {},
         "scores": candidate.get("scores") or {},
         "score_blocked": explanation['blocked'], "scoring_explanation": explanation,
@@ -334,10 +334,10 @@ def _candidate_for_storage(candidate: Dict[str, Any], score_result: Dict[str, An
         "used_weights": score_result.get("used_weights", {}),
         "timestamp": local_now().strftime("%Y-%m-%d %H:%M"),
         "position": candidate.get("position") or "Специалист",
-        "skills": candidate.get("skills") or ["Профильные навыки", "Коммуникация", "Аналитика"],
-        "experience": candidate.get("experience") or ["Опыт релевантной работы", "Опыт взаимодействия с командой"],
-        "email": candidate.get("email") or "candidate@company.ru",
-        "phone": candidate.get("phone") or "+7 (999) 000-00-00",
+        "skills": candidate.get("skills") or [],
+        "experience": candidate.get("experience") or [],
+        "email": candidate.get("email") or "",
+        "phone": candidate.get("phone") or "",
         "vacancy_id": vacancy_id or "VAC_001",
         "resume_text": candidate.get("resume_text") or "",
     }
@@ -1762,10 +1762,10 @@ def simulate():
         "critical_failures": result.get("critical_failures", []),
         "timestamp": local_now().strftime("%Y-%m-%d %H:%M"),
         "position": "Специалист",
-        "skills": ["Профильные навыки", "Коммуникация", "Аналитика"],
-        "experience": ["3+ года опыта", "Работа в кросс-функциональной команде"],
-        "email": "candidate@company.ru",
-        "phone": "+7 (999) 000-00-00",
+        "skills": [],
+        "experience": [],
+        "email": "",
+        "phone": "",
         "vacancy_id": vacancy_id or "VAC_001",
         "resume_text": demo["text"],
         "score_status": result.get("score_status"), "summary": result.get("summary"),

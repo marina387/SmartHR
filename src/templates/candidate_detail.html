@@ -13,13 +13,13 @@
                 <div class="col-md-7">
                     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                         <h2 class="fw-bold mb-0">{{ candidate.name }}</h2>
-                        <span class="status-badge badge rounded-pill {{ candidate.status_meta.badge }}">{{ candidate.status_meta.icon }} {{ candidate.status_meta.label }}</span>
+                        <span class="badge rounded-pill {{ candidate.workflow_meta.badge }}">{{ candidate.workflow_meta.icon }} {{ candidate.workflow_meta.label }}</span>
                     </div>
-                    <p class="text-muted mb-2">{{ candidate.position }} · {% if candidate.score_blocked %}Расчёт остановлен обязательным фильтром{% elif not candidate.score_available %}Оценка не сохранена{% else %}Оценка {{ candidate.score }}/100{% endif %}</p>
+                    <p class="text-muted mb-2">{{ candidate.position }} · {% if candidate.score_blocked %}Расчёт остановлен обязательным фильтром{% elif not candidate.score_available %}Оценка не сохранена{% else %}Автооценка {{ candidate.score }}/100 · {{ candidate.status_meta.label }}{% endif %}</p>
                     <div class="d-flex flex-wrap gap-3 small text-muted">
                         <span><i class="fa-solid fa-briefcase me-2"></i>{{ candidate.vacancy_id or 'VAC_001' }} · {{ candidate.vacancy_title or 'Не указана' }}</span>
-                        <span><i class="fa-solid fa-envelope me-2"></i>{{ candidate.email }}</span>
-                        <span><i class="fa-solid fa-phone me-2"></i>{{ candidate.phone }}</span>
+                        <span><i class="fa-solid fa-envelope me-2"></i>{{ candidate.email or 'Не указано' }}</span>
+                        <span><i class="fa-solid fa-phone me-2"></i>{{ candidate.phone or 'Не указано' }}</span>
                         <span><i class="fa-solid fa-calendar me-2"></i>{{ candidate.timestamp or 'Новая запись' }}</span>
                     </div>
                 </div>
@@ -162,6 +162,7 @@
                 <div class="d-flex flex-wrap gap-2">
                     {% for skill in candidate.skills %}
                     <span class="badge rounded-pill bg-light text-dark">{{ skill }}</span>
+                    {% else %}<span class="text-muted">Не указано</span>
                     {% endfor %}
                 </div>
             </div>
@@ -173,6 +174,7 @@
                 <ul class="mb-0 ps-3 text-muted">
                     {% for item in candidate.experience %}
                     <li>{{ item }}</li>
+                    {% else %}<li>Не указано</li>
                     {% endfor %}
                 </ul>
             </div>
