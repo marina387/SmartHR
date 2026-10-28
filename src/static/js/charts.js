@@ -11,8 +11,8 @@ document.addEventListener("DOMContentLoaded", () => {
             datasets: [{
                 label: data.group_by === "candidates" ? "Уникальные кандидаты" : "Рассмотрения",
                 data: stages.map((item) => item.count),
-                backgroundColor: "rgba(79, 70, 229, 0.75)",
-                borderColor: "#4f46e5",
+                backgroundColor: "rgba(75, 113, 88, 0.75)",
+                borderColor: "#4b7158",
                 borderWidth: 1,
             }],
         },
