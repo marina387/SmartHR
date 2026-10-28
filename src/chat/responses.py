@@ -63,14 +63,17 @@ def structured_answer(context, action=None):
         experience = candidate.get("experience_years")
         education = candidate.get("education")
         skills = candidate.get("skills") or []
+        vacancy_label = ('Выбранная вакансия' if vacancy.get('id') and candidate.get('vacancy_id')
+                         and str(vacancy['id']) != str(candidate['vacancy_id']) else 'Текущая вакансия')
         return "\n".join([
             f"Кандидат: {candidate.get('name') or candidate.get('id')}.",
-            f"Позиция: {candidate.get('position') or 'не указана'}.",
+            f"{vacancy_label}: {vacancy.get('title') or vacancy.get('name') or 'не выбрана'}.",
+            f"Должность в резюме: {candidate.get('position') or 'не указана'}.",
             f"Опыт работы: {str(experience) + ' лет' if experience is not None else 'не указан'}.",
             f"Образование: {education or 'не указано'}.",
             f"Навыки: {', '.join(skills) if skills else 'не указаны'}.",
             ("Расчёт оценки остановлен: не подтверждены обязательные требования — " + ', '.join(score['critical_failures']) + '.'
              if score.get('critical_failures') else
-             f"Оценка: {str(score['total']) + '/100' if score.get('total') is not None else 'нет сохранённой оценки'}."),
+             f"Оценка соответствия выбранной вакансии: {str(score['total']) + '/100' if score.get('total') is not None else 'нет сохранённой оценки'}."),
         ])
     return None
