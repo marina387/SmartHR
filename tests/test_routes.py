@@ -27,7 +27,7 @@ def test_edit_candidate_preserves_assessment(client: Any) -> None:
     with app.app_context():
         main_routes.storage.save_candidate(record)
     response = client.patch('/api/candidates/CV_edit_test', json={
-        'name': ' После ', 'email': 'test@example.com', 'phone': '+7 (900) 123-45-67', 'hr_notes': '<b>Заметка</b>'})
+        'revision':1, 'name': ' После ', 'email': 'test@example.com', 'phone': '+7 (900) 123-45-67', 'hr_notes': '<b>Заметка</b>'})
     assert response.status_code == 200
     with app.app_context():
         saved = main_routes.storage.get_candidate('CV_edit_test')
@@ -52,8 +52,8 @@ def test_resume_edit_rescores_and_keeps_stage(client: Any, monkeypatch) -> None:
         assert text == 'После SQL' and vacancy['id'] == 'VAC_001'
         return result
     monkeypatch.setattr(main_routes.scoring_service, 'score_candidate', score)
-    assert client.patch('/api/candidates/CV_resume_edit', json={'resume_text': 'После SQL'}).status_code == 400
-    response = client.patch('/api/candidates/CV_resume_edit', json={'resume_text': 'После SQL', 'rescore': True})
+    assert client.patch('/api/candidates/CV_resume_edit', json={'revision':1,'resume_text': 'После SQL'}).status_code == 400
+    response = client.patch('/api/candidates/CV_resume_edit', json={'revision':1,'resume_text': 'После SQL', 'rescore': True})
     assert response.status_code == 200
     with app.app_context():
         saved = main_routes.storage.get_candidate('CV_resume_edit')
@@ -64,7 +64,7 @@ def test_resume_edit_rescores_and_keeps_stage(client: Any, monkeypatch) -> None:
     def fail(*args, **kwargs):
         raise RuntimeError('test scoring failure')
     monkeypatch.setattr(main_routes.scoring_service, 'score_candidate', fail)
-    assert client.patch('/api/candidates/CV_resume_edit', json={'resume_text': 'Не сохранять', 'rescore': True}).status_code == 500
+    assert client.patch('/api/candidates/CV_resume_edit', json={'revision':saved['revision'],'resume_text': 'Не сохранять', 'rescore': True}).status_code == 500
     with app.app_context():
         assert main_routes.storage.get_candidate('CV_resume_edit')['resume_text'] == 'После SQL'
 

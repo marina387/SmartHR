@@ -123,6 +123,10 @@ def api_internal_error(error):
     return jsonify(error="Не удалось выполнить операцию. Повторите попытку."), 500
 
 
+def api_conflict_error(error):
+    return jsonify(error='Карточка уже изменена другим сотрудником или действием. Ваши правки не сохранены. Сверьте их с актуальной карточкой.', code='candidate_conflict'),409
+
+
 def sanitize_api_errors(response):
     # Existing routes also handle failures themselves; do not expose their trace details.
     if request.path.startswith("/api/") and response.status_code == 500:

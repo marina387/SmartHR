@@ -111,9 +111,12 @@ class SqlRepository:
 class SqlCandidateStorage(SqlRepository):
     model, id_prefix = Candidate, "CV_"
 
+    def _columns(self, payload):
+        return {key:value for key,value in super()._columns(payload).items() if key!='revision'}
+
     def _serialize(self, model: Candidate) -> Dict[str, Any]:
         result = model.as_dict()
-        for key in ("name", "position", "resume_text", "lifecycle_status", "created_at", "archived_at", "delete_after"):
+        for key in ("name", "position", "resume_text", "lifecycle_status", "created_at", "archived_at", "delete_after", "revision"):
             value = getattr(model, key)
             if value is not None:
                 result[key] = value
@@ -127,6 +130,8 @@ class SqlCandidateStorage(SqlRepository):
 
     def save_candidate(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         record = dict(candidate)
+        # The ORM manages this column; callers must never assign their own version.
+        record.pop('revision', None)
         record.setdefault("lifecycle_status", "active")
         return self.save(record)
 

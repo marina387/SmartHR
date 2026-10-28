@@ -34,9 +34,22 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await fetch("/api/candidates/" + encodeURIComponent(form.dataset.candidateId), {
                 method: "PATCH", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({...Object.fromEntries(new FormData(form)), rescore: true}),
+                body: JSON.stringify({...Object.fromEntries(new FormData(form)), rescore: true, revision: Number(form.dataset.revision)}),
             });
             const data = await response.json();
+            if (response.status === 409) {
+                error.textContent = (data.error || 'Карточка изменилась.') + ' Введённый текст остался в этой форме. ';
+                const link = document.createElement('a');
+                link.href = '/candidate/' + encodeURIComponent(form.dataset.candidateId);
+                link.target = '_blank'; link.rel = 'noopener';
+                link.textContent = 'Открыть актуальную карточку для сверки';
+                error.appendChild(link);
+                error.hidden = false;
+                error.tabIndex = -1;
+                error.focus();
+                button.disabled = false;
+                return;
+            }
             if (!response.ok) throw new Error(data.error || "Не удалось сохранить данные");
             window.location.reload();
         } catch (err) {

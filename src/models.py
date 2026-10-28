@@ -69,6 +69,8 @@ class Candidate(db.Model, PayloadMixin):
     created_at: Mapped[str | None] = mapped_column(db.String(40))
     archived_at: Mapped[str | None] = mapped_column(db.String(40))
     delete_after: Mapped[str | None] = mapped_column(db.String(40))
+    revision: Mapped[int] = mapped_column(nullable=False, default=1)
+    __mapper_args__ = {'version_id_col': revision}
 
 
 class Vacancy(db.Model, PayloadMixin):

@@ -23,6 +23,7 @@ from src.services.transactions import transactional_request
 from src.services.api_validation import validate_api_request, api_http_error, api_internal_error, sanitize_api_errors
 from werkzeug.exceptions import HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 from src.chat import ChatService, SmartHRChatTools, build_chat_model
 from src.config import DEMO_RESUMES, FUNNEL_STAGES, FUNNEL_TERMINAL_STATUSES, MAX_CONTENT_LENGTH
 from src.core.rag_pipeline import RagPipeline
@@ -51,6 +52,8 @@ main_bp.before_request(validate_api_request)
 main_bp.after_request(sanitize_api_errors)
 main_bp.register_error_handler(HTTPException, api_http_error)
 main_bp.register_error_handler(Exception, api_internal_error)
+from src.services.api_validation import api_conflict_error
+main_bp.register_error_handler(StaleDataError, api_conflict_error)
 scoring_service = CandidateScoringService()
 storage = SqlCandidateStorage()
 vacancy_storage = SqlVacancyStorage()
@@ -1410,8 +1413,8 @@ def funnel_analytics_api():
 def edit_candidate(candidate_id: str):
     body = request.get_json(silent=True) or {}
     allowed = {"name": 200, "email": 254, "phone": 50, "hr_notes": 10000, "resume_text": 200000}
-    if not body or set(body) - (allowed.keys() | {"rescore"}):
-        return jsonify(error="Допустимы только имя, почта, телефон и заметки HR"), 400
+    if not body or set(body) - (allowed.keys() | {"rescore", "revision"}):
+        return jsonify(error="В форме переданы недопустимые поля"), 400
     if "rescore" in body and not isinstance(body["rescore"], bool):
         return jsonify(error="rescore должно быть true или false"), 400
     changes = {}
@@ -1430,6 +1433,12 @@ def edit_candidate(candidate_id: str):
     candidate = storage.get_candidate(candidate_id)
     if not candidate:
         return jsonify(error="Кандидат не найден"), 404
+    if 'revision' not in body:
+        return jsonify(error='Обновите карточку перед редактированием: требуется версия записи'),428
+    if isinstance(body['revision'],bool) or not isinstance(body['revision'],int) or body['revision']<1:
+        return jsonify(error='Некорректная версия карточки'),400
+    if body['revision'] != candidate['revision']:
+        return api_conflict_error(None)
     if "resume_text" in changes and not changes["resume_text"]:
         return jsonify(error="Текст резюме не может быть пустым"), 400
     if "resume_text" in changes and changes["resume_text"] != candidate.get("resume_text", "") and not body.get("rescore"):
@@ -1456,8 +1465,8 @@ def edit_candidate(candidate_id: str):
         candidate["score"] = result["total"]
         _save_score_history(candidate_id, vacancy_id, result, "resume_edit")
     candidate.update(changes)
-    storage.save_candidate(candidate)
-    return jsonify({"id": candidate_id, **{key: candidate.get(key, "") for key in allowed}})
+    saved = storage.save_candidate(candidate)
+    return jsonify({"id": candidate_id, "revision": saved['revision'], **{key: candidate.get(key, "") for key in allowed}})
 
 
 @main_bp.route("/api/candidates/<candidate_id>/stage", methods=["POST"])

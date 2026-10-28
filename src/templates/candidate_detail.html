@@ -350,7 +350,7 @@
 </div>
 
 <div class="modal fade" id="editCandidateModal" tabindex="-1" aria-labelledby="editCandidateTitle" aria-hidden="true">
-    <div class="modal-dialog modal-lg"><form class="modal-content" id="editCandidateForm" data-candidate-id="{{ candidate.id }}">
+    <div class="modal-dialog modal-lg"><form class="modal-content" id="editCandidateForm" data-candidate-id="{{ candidate.id }}" data-revision="{{ candidate.revision }}">
         <div class="modal-header"><h5 class="modal-title" id="editCandidateTitle">Данные кандидата</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button></div>
         <div class="modal-body">
             <label for="editCandidateName" class="form-label">Имя кандидата</label>
@@ -364,6 +364,7 @@
             <label for="editCandidateResume" class="form-label mt-3">Текст резюме</label>
             <textarea id="editCandidateResume" name="resume_text" class="form-control" rows="12" maxlength="200000" required>{{ candidate.resume_text or '' }}</textarea>
             <p class="small text-muted mt-3 mb-0">При изменении резюме выполнится повторная оценка по текущей вакансии. Предыдущий текст и результат сохранятся в истории. Этап кандидата не изменится.</p>
+            <p class="small text-muted mt-2 mb-0">Если карточка уже изменена в другой вкладке или другим сотрудником, сохранение будет остановлено. Введённый текст останется в форме для сверки.</p>
             <div id="editCandidateError" class="alert alert-danger mt-3 mb-0" role="alert" hidden></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button><button type="submit" class="btn btn-primary">Сохранить и переоценить</button></div>
