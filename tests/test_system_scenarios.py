@@ -157,7 +157,9 @@ def test_unknown_and_ambiguous_names_never_reuse_selected(system):
     assert response.status_code==400
     SqlCandidateStorage().save_candidate({'id':'CV_DUP','name':'Агафонова Вера','resume_text':'SQL','lifecycle_status':'active'})
     response=system.post('/api/chat',json={'message':'найди Агафонову','conversation_id':cid})
-    assert response.status_code==400 and 'несколько' in response.get_json()['error']
+    assert response.status_code==200 and response.get_json()['needs_candidate_selection']
+    assert len(response.get_json()['candidate_options'])==2
+    assert routes.chat_conversation_storage.get_by_id(cid)['candidate_id']=='CV_ANNA'
 
 
 def test_manual_candidate_and_archive_restore_affect_analytics(system):

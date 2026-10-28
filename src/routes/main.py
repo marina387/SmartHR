@@ -574,13 +574,27 @@ def chat_api():
 
     try:
         conversation_id = str(payload.get("conversation_id") or "").strip() or None
+        choice = None
+        if payload.get('candidate_choice_token'):
+            from itsdangerous import BadSignature
+            try:
+                choice = _chat_action_serializer().loads(payload['candidate_choice_token'],max_age=900)
+            except (BadSignature,TypeError):
+                raise ValueError('Выбор кандидата устарел. Повторите исходный вопрос.')
+            if choice.get('kind')!='candidate_choice' or choice.get('conversation_id')!=conversation_id or choice.get('message')!=message_text:
+                raise ValueError('Некорректное подтверждение выбора кандидата. Повторите вопрос.')
+            candidate_id=choice['candidate_id']
+            chosen=storage.get_candidate(candidate_id)
+            if not chosen: raise ValueError('Выбранный кандидат больше недоступен. Повторите вопрос.')
+            vacancy_id=chosen.get('vacancy_id')
         conversation = None
         if conversation_id:
             conversation = _chat_history_service().conversation(conversation_id)
             candidate_id = candidate_id or conversation.get("candidate_id")
-            vacancy_id = vacancy_id or conversation.get("vacancy_id")
+            if not choice:
+                vacancy_id = vacancy_id or conversation.get("vacancy_id")
         scenario = ChatService.scenario_for_message(message_text, conversation["messages"] if conversation else (payload.get("history") if isinstance(payload.get("history"), list) else []))
-        if scenario not in {"document_search", "candidate_list", "greeting"}:
+        if not choice and scenario not in {"document_search", "candidate_list", "greeting"}:
             from src.chat.resolution import resolve_candidate
             selected = resolve_candidate(message_text, storage.list_candidates())
             if selected:
@@ -623,6 +637,18 @@ def chat_api():
 
         return jsonify(result)
     except ValueError as exc:
+        from src.chat.resolution import CandidateAmbiguity
+        if isinstance(exc,CandidateAmbiguity):
+            options=[]
+            for candidate in exc.candidates:
+                options.append({
+                    'name':candidate.get('name') or candidate['id'],
+                    'position':candidate.get('position') or 'Должность не указана',
+                    'archived':candidate.get('lifecycle_status')=='archived',
+                    'token':_chat_action_serializer().dumps({'kind':'candidate_choice','candidate_id':str(candidate['id']),
+                        'message':message_text,'conversation_id':conversation_id}),
+                })
+            return jsonify(needs_candidate_selection=True,answer='Нашёл нескольких кандидатов. Кого вы имеете в виду?',candidate_options=options)
         return jsonify({"error": str(exc)}), 400
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 503

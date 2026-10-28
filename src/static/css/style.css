@@ -135,6 +135,12 @@ body {
     background: #dcebe1;
 }
 
+.candidate-choices { display: grid; gap: 8px; margin-top: 12px; }
+.candidate-choice { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 12px 14px; text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow-wrap: anywhere; }
+.candidate-choice span { color: var(--muted); font-size: .85rem; }
+.candidate-choice:hover, .candidate-choice:focus-visible { border-color: var(--primary); background: var(--bg); }
+.candidate-choice:disabled { opacity: .6; }
+
 .eyebrow {
     text-transform: uppercase;
     letter-spacing: 0.2em;

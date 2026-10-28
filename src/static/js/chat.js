@@ -363,12 +363,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     loadConversations();
 
-    chatForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const value = input.value.trim();
+    async function sendChatMessage(value, choiceToken = null) {
         if (!value || input.disabled) return;
-        appendMessage('user', value);
-        input.value = '';
+        if (!choiceToken) {
+            appendMessage('user', value);
+            input.value = '';
+        }
         input.disabled = true;
         sendButton.disabled = true;
         status.textContent = 'Формирую ответ…';
@@ -379,6 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
             candidate_id: candidateId || null,
             vacancy_id: vacancyId || null,
             history,
+            candidate_choice_token: choiceToken,
         };
 
         try {
@@ -389,6 +390,32 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Не удалось получить ответ');
+            if (data.needs_candidate_selection) {
+                const selection = appendMessage('assistant', data.answer);
+                const choices = document.createElement('div');
+                choices.className = 'candidate-choices';
+                choices.setAttribute('aria-label','Выбор кандидата');
+                for (const candidate of data.candidate_options) {
+                    const button = document.createElement('button');
+                    button.type = 'button'; button.className = 'candidate-choice';
+                    const name = document.createElement('strong'); name.textContent = candidate.name;
+                    const detail = document.createElement('span');
+                    detail.textContent = candidate.position + (candidate.archived ? ' · В архиве' : '');
+                    button.append(name,detail);
+                    button.addEventListener('click', async () => {
+                        if (input.disabled || !choices.isConnected) return;
+                        choices.querySelectorAll('button').forEach(item => item.disabled = true);
+                        try { await sendChatMessage(value,candidate.token); }
+                        finally { choices.querySelectorAll('button').forEach(item => item.disabled = false); }
+                    });
+                    choices.appendChild(button);
+                }
+                selection.appendChild(choices);
+                status.textContent = 'Выберите кандидата';
+                scrollToLatest();
+                return;
+            }
+            messages.querySelectorAll('.candidate-choices').forEach(item => item.remove());
             const isNewConversation = !conversationId;
             conversationId = data.conversation_id;
             rememberConversation();
@@ -412,5 +439,11 @@ document.addEventListener('DOMContentLoaded', () => {
             sendButton.disabled = false;
             input.focus({preventScroll: true});
         }
+    }
+    chatForm.addEventListener('submit', event => {
+        event.preventDefault();
+        if (!input.value.trim() || input.disabled) return;
+        messages.querySelectorAll('.candidate-choices').forEach(item => item.remove());
+        sendChatMessage(input.value.trim());
     });
 });
