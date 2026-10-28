@@ -39,6 +39,13 @@ def structured_answer(context, action=None):
         if scenario == "candidate_stage":
             status = (context.get("stage") or {}).get("status")
             label = STAGE_LABELS.get(status, {"rejected": "Отказ", "archived": "В архиве", "transferred": "Перенесён"}.get(status, status))
+            if candidate.get("lifecycle_status") == "archived":
+                answer = f"Кандидат: {candidate['name']}. Сейчас находится в архиве."
+                if label and status != "archived":
+                    answer += f" Последний сохранённый этап по выбранной вакансии: {label}."
+                if candidate.get("archive_reason"):
+                    answer += f"\nПричина архивирования: {candidate['archive_reason']}"
+                return answer
             return f"Кандидат: {candidate['name']}. Текущий этап: {label}." if label else "Для кандидата не сохранён этап по выбранной вакансии."
         if scenario == "candidate_interviews":
             interviews = context.get("interviews") or []
