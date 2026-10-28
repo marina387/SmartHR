@@ -710,6 +710,31 @@ def list_chat_conversations():
     return jsonify({"conversations": rows[:limit], "next_offset": offset + limit if has_more else None})
 
 
+@main_bp.post('/api/chat/conversations/clear')
+def clear_chat_conversations():
+    from flask import g
+    from sqlalchemy import delete
+    from src.extensions import db
+    from src.models import ChatConversation
+    if g.user.role != 'admin': abort(403)
+    if (request.get_json(silent=True) or {}).get('confirmation') != 'DELETE_ALL_CHAT':
+        return jsonify(error='Подтвердите очистку всей общей истории чата'),400
+    result=db.session.execute(delete(ChatConversation))
+    db.session.flush()
+    return jsonify(deleted=result.rowcount)
+
+
+@main_bp.delete('/api/chat/conversations/<conversation_id>')
+def delete_chat_conversation(conversation_id):
+    from flask import g
+    if g.user.role != 'admin': abort(403)
+    if (request.get_json(silent=True) or {}).get('confirmed') is not True:
+        return jsonify(error='Подтвердите удаление диалога'),400
+    if not chat_conversation_storage.delete(conversation_id):
+        return jsonify(error='Диалог не найден'),404
+    return jsonify(deleted=1)
+
+
 @main_bp.route("/api/chat/conversations/<conversation_id>", methods=["GET"])
 def get_chat_conversation(conversation_id: str):
     try:

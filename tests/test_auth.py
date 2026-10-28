@@ -48,6 +48,82 @@ def admin_post(c,path,**data):
     return c.post(path,data={**data,'csrf_token':csrf})
 
 
+def seed_cleanup_chat():
+    from sqlalchemy import delete
+    from src.models import ChatConversation,ChatMessage,ChatAction,ChatResponseFeedback
+    with app.app_context():
+        db.session.execute(delete(ChatConversation).where(ChatConversation.id.in_(['CHAT_CLEAN_ONE','CHAT_CLEAN_TWO'])))
+        for suffix in ('ONE','TWO'):
+            cid='CHAT_CLEAN_'+suffix
+            db.session.add(ChatConversation(id=cid,created_at='2026-10-28',updated_at='2026-10-28',payload={}))
+            db.session.flush()
+            message=ChatMessage(conversation_id=cid,role='assistant',content='Ответ',created_at='2026-10-28',payload={})
+            db.session.add(message); db.session.flush()
+            db.session.add(ChatAction(id='CLEAN_ACTION_'+suffix,conversation_id=cid,message_id=message.id,action_type='set_stage',status='completed',created_at='2026-10-28',payload={}))
+            db.session.add(ChatResponseFeedback(id='CLEAN_FEEDBACK_'+suffix,message_id=message.id,rating='helpful',created_by='AUTH_ADMIN',created_at='2026-10-28',updated_at='2026-10-28',payload={}))
+        db.session.commit()
+
+
+def test_admin_deletes_selected_chat_with_cascade_and_audit(accounts):
+    from src.models import ChatConversation,ChatMessage,ChatAction,ChatResponseFeedback
+    seed_cleanup_chat()
+    c=client(); sign_in(c,'auth_admin')
+    with c.session_transaction() as s: csrf=s['csrf']
+    path='/api/chat/conversations/CHAT_CLEAN_ONE'
+    assert c.delete(path,json={'confirmed':True}).status_code==403
+    assert c.delete(path,json={},headers={'X-CSRF-Token':csrf}).status_code==400
+    assert c.delete(path,json={'confirmed':True},headers={'X-CSRF-Token':csrf}).status_code==200
+    with app.app_context():
+        assert db.session.get(ChatConversation,'CHAT_CLEAN_ONE') is None
+        assert db.session.get(ChatConversation,'CHAT_CLEAN_TWO')
+        assert db.session.query(ChatMessage).filter_by(conversation_id='CHAT_CLEAN_ONE').count()==0
+        assert db.session.get(ChatAction,'CLEAN_ACTION_ONE') is None
+        assert db.session.query(ChatResponseFeedback).count()==1
+        assert db.session.query(AuditEvent).filter_by(path=path,user_id='AUTH_ADMIN',method='DELETE').count()==1
+    assert c.delete(path,json={'confirmed':True},headers={'X-CSRF-Token':csrf}).status_code==404
+    assert admin_json_post(c,'/api/chat/conversations/clear',confirmation='DELETE_ALL_CHAT').status_code==200
+
+
+def test_chat_clear_requires_admin_and_preserves_business_tables(accounts):
+    from sqlalchemy import text
+    seed_cleanup_chat()
+    admin,hr=client(),client(); sign_in(admin,'auth_admin'); sign_in(hr,'auth_hr')
+    assert admin_json_post(hr,'/api/chat/conversations/clear',confirmation='DELETE_ALL_CHAT').status_code==403
+    with hr.session_transaction() as s: csrf=s['csrf']
+    assert hr.delete('/api/chat/conversations/CHAT_CLEAN_ONE',json={'confirmed':True},headers={'X-CSRF-Token':csrf}).status_code==403
+    assert admin_json_post(admin,'/api/chat/conversations/clear',confirmation='yes').status_code==400
+    with app.app_context():
+        names=[r[0] for r in db.session.execute(text("SELECT name FROM sqlite_master WHERE type='table'")) if not r[0].startswith('chat_') and r[0]!='audit_events']
+        before={name:db.session.execute(text('SELECT * FROM '+name+' ORDER BY 1')).all() for name in names}
+    assert admin_json_post(admin,'/api/chat/conversations/clear',confirmation='DELETE_ALL_CHAT').status_code==200
+    with app.app_context():
+        for name,rows in before.items(): assert db.session.execute(text('SELECT * FROM '+name+' ORDER BY 1')).all()==rows
+        for name in ('chat_conversations','chat_messages','chat_actions','chat_response_feedback'):
+            assert db.session.execute(text('SELECT count(*) FROM '+name)).scalar()==0
+
+
+def test_failed_cleanup_audit_rolls_back_deletion(accounts,monkeypatch):
+    from sqlalchemy import event
+    from src.models import ChatConversation
+    seed_cleanup_chat()
+    def fail(mapper,connection,target):
+        if target.endpoint=='main.clear_chat_conversations': raise RuntimeError('audit failure')
+    c=client(); sign_in(c,'auth_admin')
+    event.listen(AuditEvent,'before_insert',fail)
+    try:
+        response=admin_json_post(c,'/api/chat/conversations/clear',confirmation='DELETE_ALL_CHAT')
+        assert response.status_code==500
+    finally:
+        event.remove(AuditEvent,'before_insert',fail)
+    with app.app_context(): assert db.session.get(ChatConversation,'CHAT_CLEAN_ONE')
+    assert admin_json_post(c,'/api/chat/conversations/clear',confirmation='DELETE_ALL_CHAT').status_code==200
+
+
+def admin_json_post(c,path,**data):
+    with c.session_transaction() as state: csrf=state['csrf']
+    return c.post(path,json=data,headers={'X-CSRF-Token':csrf})
+
+
 def test_admin_edits_account_and_revokes_old_sessions(accounts):
     admin,hr=client(),client()
     sign_in(admin,'auth_admin'); sign_in(hr,'auth_hr')

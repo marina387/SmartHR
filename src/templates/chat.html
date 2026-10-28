@@ -58,6 +58,16 @@
                     </div>
                     <div class="d-flex align-items-center justify-content-between gap-2 mt-4 mb-3">
                         <h3 class="h6 fw-bold mb-0">История диалогов</h3>
+                        {% if current_user.role == 'admin' %}
+                        <div class="dropdown ms-auto">
+                            <button type="button" class="btn btn-sm btn-link text-secondary" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Управление историей чата"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><button type="button" class="dropdown-item" id="deleteConversation" disabled>Удалить выбранный диалог</button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="clearConversations">Очистить всю историю</button></li>
+                            </ul>
+                        </div>
+                        {% endif %}
                         <button type="button" class="btn btn-sm btn-link text-decoration-none" id="refreshConversations" aria-label="Обновить список диалогов"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>
                     </div>
                     <div id="conversationListStatus" class="small text-muted mb-2" role="status">Загрузка диалогов…</div>

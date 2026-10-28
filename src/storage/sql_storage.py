@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Type
 from functools import wraps
+from uuid import uuid4
 
 from sqlalchemy import select, func
 
@@ -251,6 +252,9 @@ class SqlScoreResultStorage:
 class SqlChatConversationStorage(SqlRepository):
     model, id_prefix = ChatConversation, "CHAT_"
 
+    def _next_id(self):
+        return self.id_prefix + uuid4().hex
+
     def list_summaries(self, *, limit=30, offset=0):
         first_question = (select(ChatMessage.content)
             .where(ChatMessage.conversation_id == ChatConversation.id, ChatMessage.role == "user")
@@ -302,6 +306,9 @@ class SqlChatMessageStorage:
 
 class SqlChatActionStorage(SqlRepository):
     model, id_prefix = ChatAction, "CACT_"
+
+    def _next_id(self):
+        return self.id_prefix + uuid4().hex
 
 
 class SqlChatFeedbackStorage(SqlRepository):

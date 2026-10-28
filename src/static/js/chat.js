@@ -35,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markSelectedConversation() {
+        const removeButton = document.getElementById('deleteConversation');
+        if (removeButton) removeButton.disabled = !conversationId;
         document.querySelectorAll('.conversation-item').forEach(button => {
             const selected = button.dataset.id === conversationId;
             button.classList.toggle('is-active', selected);
@@ -219,9 +221,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('currentDocumentTitle').textContent = items[0].title || items[0].source;
     }
 
-    document.getElementById('newConversation').addEventListener('click', () => {
+    function startNewConversation(preserveDraft = true) {
         if (input.disabled) return;
-        drafts.set(conversationId || 'new', input.value);
+        if (preserveDraft) drafts.set(conversationId || 'new', input.value);
         conversationId = null;
         rememberConversation();
         input.value = '';
@@ -234,7 +236,44 @@ document.addEventListener('DOMContentLoaded', () => {
         appendMessage('assistant', 'Начат новый диалог. Чем помочь?');
         status.textContent = 'Готов';
         input.focus({preventScroll: true});
-    });
+    }
+    document.getElementById('newConversation').addEventListener('click', () => startNewConversation());
+
+    async function deleteHistory(all) {
+        if (input.disabled || (!all && !conversationId)) return;
+        if (all) {
+            if (window.prompt('Общая история всех пользователей будет удалена без возможности отмены. Кандидаты, оценки и выполненные изменения сохранятся. Для подтверждения введите ОЧИСТИТЬ:') !== 'ОЧИСТИТЬ') return;
+        } else if (!window.confirm('Удалить выбранный диалог для всех пользователей? Сообщения, источники и обратная связь будут удалены. Кандидаты, оценки и выполненные изменения сохранятся. Отменить удаление нельзя.')) return;
+        const targetId = conversationId;
+        input.disabled = true;
+        sendButton.disabled = true;
+        markSelectedConversation();
+        try {
+            const response = await fetch(all ? '/api/chat/conversations/clear' : `/api/chat/conversations/${encodeURIComponent(targetId)}`, {
+                method: all ? 'POST' : 'DELETE', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(all ? {confirmation:'DELETE_ALL_CHAT'} : {confirmed:true}),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Не удалось удалить историю');
+            drafts.delete(targetId);
+            if (all) drafts.clear();
+            for (const key of Object.keys(window.sessionStorage)) {
+                if (key.startsWith('smarthr-chat:') && (all || window.sessionStorage.getItem(key) === targetId)) window.sessionStorage.removeItem(key);
+            }
+            input.disabled = false;
+            startNewConversation(false);
+            await loadConversations();
+            status.textContent = all ? 'История чата очищена' : 'Диалог удалён';
+        } catch (error) {
+            status.textContent = error.message;
+        } finally {
+            input.disabled = false;
+            sendButton.disabled = false;
+            markSelectedConversation();
+        }
+    }
+    document.getElementById('deleteConversation')?.addEventListener('click', () => deleteHistory(false));
+    document.getElementById('clearConversations')?.addEventListener('click', () => deleteHistory(true));
 
     function appendAction(assistantMessage, action) {
         if (action.status && action.status !== "pending") {
