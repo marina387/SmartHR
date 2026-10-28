@@ -12,7 +12,7 @@ from uuid import uuid4
 from functools import wraps
 
 from flask import Blueprint, abort, current_app, g, jsonify, redirect, render_template, request, session, url_for, make_response, has_app_context
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 from src.extensions import db
@@ -117,7 +117,7 @@ def login():
             session.permanent=True
             csrf_token()
             with attempt_lock: attempts.pop(key,None)
-            return redirect(url_for('main.index'))
+            return redirect(url_for('auth.password' if user.must_change_password else 'main.index'))
         error='Неверный логин или пароль'
     return render_template('auth_login.html',setup=False,error=error)
 
@@ -138,8 +138,11 @@ def password():
             error='Текущий пароль указан неверно'
         elif not 12<=len(new)<=256 or new!=request.form.get('repeat_password'):
             error='Новый пароль: от 12 до 256 символов; повтор должен совпадать'
+        elif check_password_hash(g.user.password_hash,new):
+            error='Новый пароль должен отличаться от текущего'
         else:
             g.user.password_hash=generate_password_hash(new)
+            g.user.must_change_password=False
             g.user.session_version+=1
             db.session.flush()
             session['user_version']=g.user.session_version
@@ -170,10 +173,85 @@ def users():
 
 @auth_bp.post('/admin/users/<user_id>/toggle')
 def toggle(user_id):
+    lock_admin_change()
     user=db.session.get(User,user_id)
     if not user: abort(404)
+    db.session.refresh(user)
     if user.id==g.user.id: abort(400,description='Нельзя отключить собственную учётную запись')
+    if user.active and user.role=='admin' and active_admin_count()<=1:
+        abort(400,description='Нельзя отключить последнего активного администратора')
     user.active=not user.active
+    user.session_version+=1
+    db.session.flush()
+    return redirect(url_for('auth.users'))
+
+
+def lock_admin_change():
+    # SQLite serializes writers. Take the write lock BEFORE checking admin counts,
+    # then refresh the actor so parallel demotions cannot remove the last admin.
+    db.session.execute(update(User).where(User.id==g.user.id).values(session_version=User.session_version))
+    db.session.refresh(g.user)
+    if not g.user.active or g.user.role!='admin':
+        abort(403)
+
+
+def active_admin_count():
+    return db.session.scalar(select(func.count()).select_from(User).where(User.active.is_(True),User.role=='admin'))
+
+
+@auth_bp.route('/admin/users/<user_id>/edit',methods=['GET','POST'])
+def edit_user(user_id):
+    if request.method=='POST': lock_admin_change()
+    user=db.session.get(User,user_id)
+    if not user: abort(404)
+    db.session.refresh(user)
+    error=None
+    if request.method=='POST':
+        login=str(request.form.get('login','')).strip().casefold()
+        name=str(request.form.get('name','')).strip()
+        role=request.form.get('role','')
+        if not re.fullmatch(r'[a-zа-яё0-9_.-]{3,120}',login) or not name or len(name)>200:
+            error='Укажите имя и корректный логин: 3–120 русских или латинских букв, цифр, _ . - без пробелов'
+        elif role not in {'hr','admin'}:
+            error='Неизвестная роль'
+        elif user.active and user.role=='admin' and role!='admin' and active_admin_count()<=1:
+            error='Нельзя понизить роль последнего активного администратора'
+        elif db.session.scalar(select(User.id).where(User.login==login,User.id!=user.id)):
+            error='Такой логин уже существует'
+        else:
+            user.login,user.name,user.role=login,name,role
+            user.session_version+=1
+            try:
+                db.session.flush()
+            except IntegrityError:
+                db.session.rollback()
+                error='Такой логин уже существует'
+            else:
+                if user.id==g.user.id:
+                    session['user_version']=user.session_version
+                    return redirect(url_for('main.index'))
+                return redirect(url_for('auth.users'))
+    return render_template('auth_user_edit.html',user=user,error=error),400 if error else 200
+
+
+@auth_bp.post('/admin/users/<user_id>/reset-password')
+def reset_password(user_id):
+    lock_admin_change()
+    user=db.session.get(User,user_id)
+    if not user: abort(404)
+    db.session.refresh(user)
+    error=None
+    password=request.form.get('temporary_password','')
+    if user.id==g.user.id:
+        error='Свой пароль меняйте в разделе «Сменить пароль»'
+    elif not 12<=len(password)<=256 or password!=request.form.get('repeat_password'):
+        error='Временный пароль: от 12 до 256 символов; повтор должен совпадать'
+    elif check_password_hash(user.password_hash,password):
+        error='Временный пароль должен отличаться от текущего'
+    if error:
+        return render_template('auth_user_edit.html',user=user,error=error),400
+    user.password_hash=generate_password_hash(password)
+    user.must_change_password=True
     user.session_version+=1
     db.session.flush()
     return redirect(url_for('auth.users'))
@@ -206,6 +284,10 @@ def install_auth(app):
             return redirect(url_for(destination))
         if request.path.startswith('/admin/') and (not g.user or g.user.role!='admin'):
             abort(403)
+        if g.user and g.user.must_change_password and request.endpoint not in {'auth.password','auth.logout'}:
+            if request.path.startswith('/api/'):
+                return jsonify(error='Необходимо сменить временный пароль',code='password_change_required'),403
+            return redirect(url_for('auth.password'))
         if request.method not in {'GET','HEAD','OPTIONS'}:
             supplied=request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
             expected=session.get('csrf')

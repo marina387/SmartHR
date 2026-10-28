@@ -17,6 +17,7 @@ class User(db.Model):
     role: Mapped[str] = mapped_column(db.String(20), nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
     session_version: Mapped[int] = mapped_column(default=1, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 
 class AuthBootstrap(db.Model):

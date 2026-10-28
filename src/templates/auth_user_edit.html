@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}SmartHR — Учётная запись сотрудника{% endblock %}
+{% block content %}
+<a class="small text-decoration-none" href="{{ url_for('auth.users') }}">← Сотрудники</a>
+<h1 class="h3 mt-3 mb-4">Учётная запись: {{ user.name }}</h1>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+<div class="row g-4">
+    <div class="col-xl-7">
+        <form method="post" action="{{ url_for('auth.edit_user',user_id=user.id) }}" class="card p-4 border-0 shadow-sm">
+            <h2 class="h5 mb-3">Данные и права</h2>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="editName" class="form-label">Фамилия и имя</label>
+            <input id="editName" name="name" class="form-control mb-3" value="{{ request.form.get('name',user.name) }}" required maxlength="200">
+            <label for="editLogin" class="form-label">Логин</label>
+            <input id="editLogin" name="login" class="form-control mb-2" value="{{ request.form.get('login',user.login) }}" required minlength="3" maxlength="120" autocomplete="off">
+            <p class="small text-muted">Кириллица, латиница, цифры, _ . -; без пробелов. Регистр не учитывается.</p>
+            <label for="editRole" class="form-label">Роль</label>
+            <select id="editRole" name="role" class="form-select mb-3">
+                {% for role,label in [('hr','HR'),('admin','Администратор')] %}
+                <option value="{{ role }}" {% if request.form.get('role',user.role)==role %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <p class="small text-muted">После сохранения остальные сессии сотрудника завершатся. Последний активный администратор должен сохранить свою роль.</p>
+            <button class="btn btn-primary align-self-start">Сохранить изменения</button>
+        </form>
+    </div>
+    {% if user.id != current_user.id %}
+    <div class="col-xl-5">
+        <form method="post" action="{{ url_for('auth.reset_password',user_id=user.id) }}" class="card p-4 border-0 shadow-sm">
+            <h2 class="h5 mb-3">Сброс пароля</h2>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <p class="small text-muted">Задайте временный пароль и передайте его сотруднику лично. При следующем входе он обязан заменить его. Текущие сессии завершатся.</p>
+            <label for="temporaryPassword" class="form-label">Временный пароль</label>
+            <input id="temporaryPassword" type="password" name="temporary_password" class="form-control mb-3" required minlength="12" maxlength="256" autocomplete="new-password">
+            <label for="repeatTemporaryPassword" class="form-label">Повторите временный пароль</label>
+            <input id="repeatTemporaryPassword" type="password" name="repeat_password" class="form-control mb-3" required minlength="12" maxlength="256" autocomplete="new-password">
+            <button class="btn btn-outline-primary align-self-start">Сбросить пароль</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

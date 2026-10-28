@@ -19,6 +19,10 @@ def accounts(isolated_application):
                           password_hash=generate_password_hash('correct-password-123'))
                 db.session.add(user)
             user.active=True
+            user.login=uid.casefold()
+            user.name=uid
+            user.role=role
+            user.must_change_password=False
             user.session_version=1
             user.password_hash=generate_password_hash('correct-password-123')
         db.session.commit()
@@ -37,6 +41,77 @@ def token(c):
 
 def sign_in(c,login):
     return c.post('/login',data={'login':login,'password':'correct-password-123','csrf_token':token(c)})
+
+
+def admin_post(c,path,**data):
+    with c.session_transaction() as state: csrf=state['csrf']
+    return c.post(path,data={**data,'csrf_token':csrf})
+
+
+def test_admin_edits_account_and_revokes_old_sessions(accounts):
+    admin,hr=client(),client()
+    sign_in(admin,'auth_admin'); sign_in(hr,'auth_hr')
+    response=admin_post(admin,'/admin/users/AUTH_HR/edit',name='Иванова Анна',login='ИВАНОВА',role='admin')
+    assert response.status_code==302
+    assert hr.get('/api/candidates').status_code==401
+    with app.app_context():
+        user=db.session.get(User,'AUTH_HR')
+        assert (user.name,user.login,user.role)==('Иванова Анна','иванова','admin')
+        assert db.session.query(AuditEvent).filter_by(path='/admin/users/AUTH_HR/edit',user_id='AUTH_ADMIN').count()==1
+    assert sign_in(client(),'иванова').status_code==302
+
+
+def test_admin_cannot_demote_last_active_admin(accounts):
+    from sqlalchemy import update
+    with app.app_context():
+        db.session.execute(update(User).where(User.role=='admin',User.id!='AUTH_ADMIN').values(active=False))
+        db.session.commit()
+    admin=client(); sign_in(admin,'auth_admin')
+    response=admin_post(admin,'/admin/users/AUTH_ADMIN/edit',name='Администратор',login='auth_admin',role='hr')
+    assert response.status_code==400
+    assert 'последнего активного администратора' in response.get_data(as_text=True)
+    with app.app_context(): assert db.session.get(User,'AUTH_ADMIN').role=='admin'
+
+
+def test_admin_can_demote_self_when_another_active_admin_exists(accounts):
+    admin=client(); sign_in(admin,'auth_admin')
+    assert admin_post(admin,'/admin/users/AUTH_HR/edit',name='Второй администратор',login='auth_hr',role='admin').status_code==302
+    assert admin_post(admin,'/admin/users/AUTH_ADMIN/edit',name='Первый сотрудник',login='auth_admin',role='hr').status_code==302
+    assert admin.get('/admin/users').status_code==403
+
+
+def test_reset_requires_replacement_and_revokes_old_password(accounts):
+    admin,hr=client(),client(); sign_in(admin,'auth_admin'); sign_in(hr,'auth_hr')
+    temporary='temporary-password-123'
+    assert admin_post(admin,'/admin/users/AUTH_HR/reset-password',temporary_password=temporary,repeat_password=temporary).status_code==302
+    assert hr.get('/api/candidates').status_code==401
+    fresh=client()
+    assert 'Неверный логин' in sign_in(fresh,'auth_hr').get_data(as_text=True)
+    response=fresh.post('/login',data={'login':'auth_hr','password':temporary,'csrf_token':token(fresh)})
+    assert response.status_code==302 and response.location.endswith('/account/password')
+    assert fresh.get('/').location.endswith('/account/password')
+    assert fresh.get('/api/candidates').get_json()['code']=='password_change_required'
+    assert admin_post(fresh,'/api/candidates/AUTH_HR/stage',stage='offer').status_code==403
+    assert admin_post(fresh,'/account/password',old_password=temporary,new_password=temporary,repeat_password=temporary).status_code==200
+    with app.app_context(): assert db.session.get(User,'AUTH_HR').must_change_password
+    replacement='replacement-password-456'
+    assert admin_post(fresh,'/account/password',old_password=temporary,new_password=replacement,repeat_password=replacement).status_code==302
+    assert fresh.get('/').status_code==200
+    with app.app_context():
+        assert not db.session.get(User,'AUTH_HR').must_change_password
+        assert temporary not in str([(x.path,x.user_name) for x in db.session.query(AuditEvent).all()])
+
+
+def test_admin_management_validation_and_hr_permissions(accounts):
+    admin,hr=client(),client(); sign_in(admin,'auth_admin'); sign_in(hr,'auth_hr')
+    assert hr.get('/admin/users/AUTH_ADMIN/edit').status_code==403
+    for suffix in ('edit','reset-password'):
+        assert admin_post(hr,'/admin/users/AUTH_ADMIN/'+suffix).status_code==403
+    assert admin.post('/admin/users/AUTH_HR/edit',data={}).status_code==403
+    for login,role in [('auth_admin','hr'),('bad login','hr'),('validlogin','owner')]:
+        assert admin_post(admin,'/admin/users/AUTH_HR/edit',name='Сотрудник',login=login,role=role).status_code==400
+    assert admin_post(admin,'/admin/users/AUTH_HR/reset-password',temporary_password='short',repeat_password='short').status_code==400
+    assert admin_post(admin,'/admin/users/AUTH_ADMIN/reset-password',temporary_password='new-password-123',repeat_password='new-password-123').status_code==400
 
 
 def test_anonymous_pages_and_api_are_protected(accounts):

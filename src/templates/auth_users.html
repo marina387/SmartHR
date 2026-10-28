@@ -4,10 +4,11 @@
 <h1 class="h3 mb-4">Учётные записи сотрудников</h1>
 {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
 <div class="row g-4"><div class="col-lg-7"><div class="card p-3 border-0 shadow-sm">
-<table class="table"><thead><tr><th>Сотрудник</th><th>Логин</th><th>Роль</th><th>Доступ</th></tr></thead><tbody>
-{% for user in users %}<tr><td>{{ user.name }}</td><td>{{ user.login }}</td><td>{{ 'Администратор' if user.role=='admin' else 'HR' }}</td><td>
+<div class="table-responsive"><table class="table"><thead><tr><th>Сотрудник</th><th>Логин</th><th>Роль</th><th>Доступ</th></tr></thead><tbody>
+{% for user in users %}<tr><td><a href="{{ url_for('auth.edit_user',user_id=user.id) }}">{{ user.name }}</a>{% if user.must_change_password %}<div class="small text-muted">Ожидается смена пароля</div>{% endif %}</td><td>{{ user.login }}</td><td>{{ 'Администратор' if user.role=='admin' else 'HR' }}</td><td>
+<div class="small mb-1">{{ 'Активен' if user.active else 'Отключён' }}</div>
 {% if user.id==current_user.id %}Ваша учётная запись{% else %}<form method="post" action="{{ url_for('auth.toggle',user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Отключить' if user.active else 'Включить' }}</button></form>{% endif %}
-</td></tr>{% endfor %}</tbody></table></div></div>
+</td></tr>{% endfor %}</tbody></table></div></div></div>
 <div class="col-lg-5"><form method="post" class="card p-4 border-0 shadow-sm">
 <h2 class="h5">Добавить сотрудника</h2><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label for="userName" class="form-label">Фамилия и имя</label><input id="userName" name="name" class="form-control mb-2" required maxlength="200">
