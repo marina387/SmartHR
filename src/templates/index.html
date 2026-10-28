@@ -79,28 +79,17 @@
     </div>
 
     <div class="row g-4 mt-1">
-        <div class="col-lg-7">
+        <div class="col-xl-7">
             <div class="card border-0 shadow-sm h-100 rounded-4">
                 <div class="card-body">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                         <div>
-                            <h2 class="h5 fw-bold mb-1">Быстрый доступ</h2>
-                            <p class="text-muted mb-0">Откройте нужный раздел за один клик.</p>
+                            <h2 class="h5 fw-bold mb-1">Последние кандидаты</h2>
+                            <a class="small text-decoration-none" href="{{ url_for('main.candidates_page') }}">Показать все</a>
                         </div>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 mb-4">
-                        <a class="btn btn-outline-primary" href="{{ url_for('main.candidates_page') }}"><i class="fa-solid fa-users me-2"></i>Все кандидаты</a>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#manualCandidateModal"><i class="fa-solid fa-user-plus me-2"></i>Добавить вручную</button>
-                        <a class="btn btn-outline-primary" href="{{ url_for('main.analytics_page') }}"><i class="fa-solid fa-chart-line me-2"></i>Аналитика</a>
-                        <a class="btn btn-outline-primary" href="{{ url_for('main.vacancies_page') }}"><i class="fa-solid fa-briefcase me-2"></i>Вакансии</a>
-                        <a class="btn btn-outline-primary" href="{{ url_for('main.chat_page') }}"><i class="fa-solid fa-comments me-2"></i>Чат-ассистент</a>
-                        <a class="btn btn-outline-primary" href="{{ url_for('main.documents_page') }}"><i class="fa-solid fa-file-lines me-2"></i>Документы</a>
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#manualCandidateModal"><i class="fa-solid fa-user-plus me-2"></i>Добавить кандидата</button>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h3 class="h6 fw-bold mb-0">Последние кандидаты</h3>
-                        <a class="small text-decoration-none" href="{{ url_for('main.candidates_page') }}">Показать все</a>
-                    </div>
                     <div class="list-group list-group-flush">
                         {% for candidate in recent_candidates %}
                         <a class="list-group-item px-0 py-3 d-flex justify-content-between align-items-center text-decoration-none text-dark" href="{{ url_for('main.candidate_detail', candidate_id=candidate.id) }}">
@@ -123,7 +112,7 @@
             </div>
         </div>
 
-        <div class="col-lg-5">
+        <div class="col-xl-5">
             <div class="card border-0 shadow-sm h-100 rounded-4">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
